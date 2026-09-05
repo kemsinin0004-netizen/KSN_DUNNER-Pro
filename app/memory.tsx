@@ -3,9 +3,13 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { StatusBar } from "expo-status-bar";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { deleteMemory, listMemories, updateMemory, type MemoryRecord } from "@/lib/memory-db";
+import { deleteMemory, importMemories, listMemories, updateMemory, type MemoryRecord } from "@/lib/memory-db";
+import { memoriesToJson, memoriesToMarkdown, parseMemoryImport } from "@/lib/memory-transfer";
 
 const COLORS = {
   bg: "#070B10",
@@ -76,6 +80,58 @@ export default function MemoryScreen() {
     setStatus("បានលុប Memory រួចរាល់");
   };
 
+  const shareExport = async (format: "json" | "markdown") => {
+    try {
+      const allMemories = await listMemories();
+      if (!allMemories.length) {
+        setStatus("មិនទាន់មាន Memory សម្រាប់ export ទេ");
+        return;
+      }
+      if (!FileSystem.documentDirectory) throw new Error("មិនមាន local document directory");
+      const extension = format === "json" ? "json" : "md";
+      const mimeType = format === "json" ? "application/json" : "text/markdown";
+      const fileUri = `${FileSystem.documentDirectory}skillnext-memory-${Date.now()}.${extension}`;
+      const content = format === "json" ? memoriesToJson(allMemories) : memoriesToMarkdown(allMemories);
+      await FileSystem.writeAsStringAsync(fileUri, content, { encoding: FileSystem.EncodingType.UTF8 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType, dialogTitle: `Export ${format.toUpperCase()}` });
+        setStatus(`បាន export ${allMemories.length} Memories ជា ${format.toUpperCase()}`);
+      } else {
+        setStatus("Share sheet មិនមានលើឧបករណ៍នេះទេ");
+      }
+    } catch {
+      setStatus("Export មិនបានសម្រេចទេ");
+    }
+  };
+
+  const chooseExportFormat = () => {
+    Alert.alert("Export Memory", "ជ្រើសរើសទម្រង់ឯកសារ", [
+      { text: "JSON", onPress: () => void shareExport("json") },
+      { text: "Markdown", onPress: () => void shareExport("markdown") },
+      { text: "បោះបង់", style: "cancel" },
+    ]);
+  };
+
+  const importBackup = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["application/json", "text/markdown", "text/plain"],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      const text = await FileSystem.readAsStringAsync(asset.uri);
+      const format = asset.name.toLowerCase().endsWith(".json") ? "json" : "markdown";
+      const records = parseMemoryImport(text, format);
+      const imported = await importMemories(records);
+      await loadMemories();
+      setStatus(imported ? `បាន import ${imported} Memories ថ្មី` : "គ្មាន Memory ថ្មីត្រូវបានបន្ថែម");
+    } catch {
+      setStatus("Import មិនបានសម្រេចទេ៖ ពិនិត្យ JSON ឬ Markdown file");
+    }
+  };
+
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]} containerClassName="bg-background">
       <StatusBar style="light" />
@@ -88,6 +144,10 @@ export default function MemoryScreen() {
 
         <View style={styles.status}><View style={styles.statusDot} /><Text style={styles.statusText}>{status}</Text></View>
         <View style={styles.searchBox}><MaterialIcons name="search" size={19} color={COLORS.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="ស្វែងរក Memory…" placeholderTextColor={COLORS.muted} style={styles.searchInput} /></View>
+        <View style={styles.transferRow}>
+          <Pressable onPress={chooseExportFormat} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export</Text></Pressable>
+          <Pressable onPress={() => void importBackup()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="file-upload" size={17} color="#7DB8FF" /><Text style={[styles.transferText, { color: "#7DB8FF" }]}>Import</Text></Pressable>
+        </View>
 
         {editing ? (
           <View style={styles.editorCard}>
@@ -131,6 +191,9 @@ const styles = StyleSheet.create({
   statusText: { color: "#BEEACB", fontSize: 11 },
   searchBox: { height: 45, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, marginBottom: 14 },
   searchInput: { flex: 1, color: COLORS.text, fontSize: 12 },
+  transferRow: { flexDirection: "row", gap: 9, marginBottom: 14 },
+  transferButton: { flex: 1, height: 39, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  transferText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
   listContent: { paddingBottom: 32, flexGrow: 1 },
   memoryCard: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 13, borderRadius: 16, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, marginBottom: 9 },
   memoryIcon: { width: 39, height: 39, borderRadius: 12, backgroundColor: COLORS.greenDark, alignItems: "center", justifyContent: "center" },

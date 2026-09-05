@@ -7,6 +7,8 @@ export type MemoryRecord = {
   createdAt: string;
 };
 
+export type ImportMemoryRecord = Pick<MemoryRecord, "title" | "content"> & { createdAt?: string };
+
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 async function getDatabase() {
@@ -53,6 +55,27 @@ export async function updateMemory(id: number, title: string, content: string) {
     content.trim(),
     id,
   );
+}
+
+export async function importMemories(records: ImportMemoryRecord[]) {
+  const database = await getDatabase();
+  const existing = await listMemories();
+  const known = new Set(existing.map((memory) => `${memory.title}\u0000${memory.content}`));
+  let imported = 0;
+  for (const record of records) {
+    const title = record.title.trim();
+    const content = record.content.trim();
+    if (!title || !content || known.has(`${title}\u0000${content}`)) continue;
+    await database.runAsync(
+      "INSERT INTO memories (title, content, created_at) VALUES (?, ?, ?)",
+      title,
+      content,
+      record.createdAt ?? new Date().toISOString(),
+    );
+    known.add(`${title}\u0000${content}`);
+    imported += 1;
+  }
+  return imported;
 }
 
 export async function deleteMemory(id: number) {

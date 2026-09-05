@@ -5,6 +5,8 @@ export type MemoryRecord = {
   createdAt: string;
 };
 
+export type ImportMemoryRecord = Pick<MemoryRecord, "title" | "content"> & { createdAt?: string };
+
 const webMemories: MemoryRecord[] = [];
 
 export async function listMemories(): Promise<MemoryRecord[]> {
@@ -28,6 +30,20 @@ export async function updateMemory(id: number, title: string, content: string) {
     record.title = title.trim();
     record.content = content.trim();
   }
+}
+
+export async function importMemories(records: ImportMemoryRecord[]) {
+  const known = new Set(webMemories.map((memory) => `${memory.title}\u0000${memory.content}`));
+  let imported = 0;
+  for (const record of records) {
+    const title = record.title.trim();
+    const content = record.content.trim();
+    if (!title || !content || known.has(`${title}\u0000${content}`)) continue;
+    webMemories.unshift({ id: Date.now() + imported, title, content, createdAt: record.createdAt ?? new Date().toISOString() });
+    known.add(`${title}\u0000${content}`);
+    imported += 1;
+  }
+  return imported;
 }
 
 export async function deleteMemory(id: number) {
