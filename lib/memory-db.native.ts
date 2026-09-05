@@ -10,7 +10,7 @@ export type MemoryRecord = {
 };
 
 export type ImportMemoryRecord = Pick<MemoryRecord, "title" | "content"> & { category?: string; tags?: string[]; createdAt?: string };
-export type SavedFilter = { id: number; name: string; query: string; category: string; tags: string[] };
+export type SavedFilter = { id: number; name: string; query: string; category: string; tags: string[]; lastUsedAt: string | null; useCount: number };
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -35,10 +35,14 @@ async function getDatabase() {
       query TEXT NOT NULL DEFAULT '',
       category TEXT NOT NULL DEFAULT 'All',
       tags TEXT NOT NULL DEFAULT '[]'
+      ,last_used_at TEXT
+      ,use_count INTEGER NOT NULL DEFAULT 0
     );
   `);
   try { await database.execAsync("ALTER TABLE memories ADD COLUMN category TEXT NOT NULL DEFAULT 'General'"); } catch {}
   try { await database.execAsync("ALTER TABLE memories ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'"); } catch {}
+  try { await database.execAsync("ALTER TABLE saved_filters ADD COLUMN last_used_at TEXT"); } catch {}
+  try { await database.execAsync("ALTER TABLE saved_filters ADD COLUMN use_count INTEGER NOT NULL DEFAULT 0"); } catch {}
   return database;
 }
 
@@ -104,14 +108,19 @@ export async function deleteMemory(id: number) {
 
 export async function listSavedFilters(): Promise<SavedFilter[]> {
   const database = await getDatabase();
-  const rows = await database.getAllAsync<{ id: number; name: string; query: string; category: string; tags: string }>("SELECT id, name, query, category, tags FROM saved_filters ORDER BY id DESC");
+  const rows = await database.getAllAsync<{ id: number; name: string; query: string; category: string; tags: string; lastUsedAt: string | null; useCount: number }>("SELECT id, name, query, category, tags, last_used_at AS lastUsedAt, use_count AS useCount FROM saved_filters ORDER BY CASE WHEN last_used_at IS NULL THEN 1 ELSE 0 END, last_used_at DESC, id DESC");
   return rows.map((row) => ({ ...row, tags: parseTags(row.tags) }));
 }
 
 export async function createSavedFilter(name: string, query: string, category: string, tags: string[]) {
   const database = await getDatabase();
-  const result = await database.runAsync("INSERT INTO saved_filters (name, query, category, tags) VALUES (?, ?, ?, ?)", name.trim(), query.trim(), category, JSON.stringify(tags));
-  return { id: result.lastInsertRowId, name: name.trim(), query: query.trim(), category, tags } satisfies SavedFilter;
+  const result = await database.runAsync("INSERT INTO saved_filters (name, query, category, tags, last_used_at, use_count) VALUES (?, ?, ?, ?, NULL, 0)", name.trim(), query.trim(), category, JSON.stringify(tags));
+  return { id: result.lastInsertRowId, name: name.trim(), query: query.trim(), category, tags, lastUsedAt: null, useCount: 0 } satisfies SavedFilter;
+}
+
+export async function markSavedFilterUsed(id: number) {
+  const database = await getDatabase();
+  await database.runAsync("UPDATE saved_filters SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?", new Date().toISOString(), id);
 }
 
 export async function deleteSavedFilter(id: number) {

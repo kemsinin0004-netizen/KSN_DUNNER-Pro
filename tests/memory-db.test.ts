@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createMemory, createSavedFilter, deleteSavedFilter, listMemories, listSavedFilters } from "../lib/memory-db.web";
+import { createMemory, createSavedFilter, deleteSavedFilter, listMemories, listSavedFilters, markSavedFilterUsed } from "../lib/memory-db.web";
 
 describe("SkillNext memory repository contract", () => {
   it("creates and lists a memory record", async () => {
@@ -19,6 +19,8 @@ describe("SkillNext memory repository contract", () => {
   it("persists a named category and tag filter", async () => {
     const created = await createSavedFilter("Work urgent", "client", "Work", ["urgent", "client"]);
     expect((await listSavedFilters())[0]).toEqual(created);
+    await markSavedFilterUsed(created.id);
+    expect((await listSavedFilters())[0]).toMatchObject({ id: created.id, useCount: 1 });
     await deleteSavedFilter(created.id);
     expect((await listSavedFilters()).find((filter) => filter.id === created.id)).toBeUndefined();
   });
