@@ -36,6 +36,7 @@ export default function MemoryScreen() {
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("All");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const loadMemories = useCallback(async () => {
     try {
@@ -54,11 +55,13 @@ export default function MemoryScreen() {
     return memories.filter((memory) => {
       const matchesCategory = categoryFilter === "All" || memory.category === categoryFilter;
       const matchesQuery = !normalized || `${memory.title} ${memory.content} ${memory.category} ${memory.tags.join(" ")}`.toLowerCase().includes(normalized);
-      return matchesCategory && matchesQuery;
+      const matchesTags = selectedTags.every((tag) => memory.tags.includes(tag));
+      return matchesCategory && matchesQuery && matchesTags;
     });
-  }, [memories, query, categoryFilter]);
+  }, [memories, query, categoryFilter, selectedTags]);
 
   const categories = useMemo(() => ["All", ...Array.from(new Set(memories.map((memory) => memory.category).filter(Boolean)))], [memories]);
+  const allTags = useMemo(() => Array.from(new Set(memories.flatMap((memory) => memory.tags))).sort(), [memories]);
 
   const beginEdit = (memory: MemoryRecord) => {
     setEditing(memory);
@@ -140,6 +143,16 @@ export default function MemoryScreen() {
     setSelectedIds([]);
   };
 
+  const toggleTagFilter = (tag: string) => {
+    setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
+  };
+
+  const clearFilters = () => {
+    setCategoryFilter("All");
+    setSelectedTags([]);
+    setQuery("");
+  };
+
   const importBackup = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -173,6 +186,9 @@ export default function MemoryScreen() {
         <View style={styles.status}><View style={styles.statusDot} /><Text style={styles.statusText}>{status}</Text></View>
         <View style={styles.searchBox}><MaterialIcons name="search" size={19} color={COLORS.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="ស្វែងរក Memory…" placeholderTextColor={COLORS.muted} style={styles.searchInput} /></View>
         <FlatList horizontal data={categories} keyExtractor={(item) => item} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow} renderItem={({ item }) => <Pressable onPress={() => setCategoryFilter(item)} style={[styles.categoryChip, categoryFilter === item && styles.categoryChipActive]}><Text style={[styles.categoryText, categoryFilter === item && styles.categoryTextActive]}>{item}</Text></Pressable>} />
+        {allTags.length ? <View style={styles.tagFilterHeader}><Text style={styles.filterLabel}>FILTER តាម Tags</Text>{selectedTags.length ? <Pressable onPress={clearFilters}><Text style={styles.clearFilters}>សម្អាត</Text></Pressable> : null}</View> : null}
+        {allTags.length ? <FlatList horizontal data={allTags} keyExtractor={(item) => item} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagRow} renderItem={({ item }) => <Pressable onPress={() => toggleTagFilter(item)} style={[styles.tagChip, selectedTags.includes(item) && styles.tagChipActive]}><Text style={[styles.tagFilterText, selectedTags.includes(item) && styles.tagFilterTextActive]}>#{item}</Text></Pressable>} /> : null}
+        {selectedTags.length ? <View style={styles.activeFilterNote}><MaterialIcons name="filter-list" size={14} color={COLORS.green} /><Text style={styles.activeFilterText}>បង្ហាញ Memory ដែលមានគ្រប់ {selectedTags.length} Tags ដែលបានជ្រើស</Text></View> : null}
         <View style={styles.transferRow}>
           {bulkMode ? <Pressable onPress={() => toggleSelectAll()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="select-all" size={17} color={COLORS.green} /><Text style={styles.transferText}>{selectedIds.length ? "បោះជ្រើស" : "ជ្រើសទាំងអស់"}</Text></Pressable> : <Pressable onPress={() => chooseExportFormat(false)} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export ទាំងអស់</Text></Pressable>}
           <Pressable onPress={() => void importBackup()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="file-upload" size={17} color="#7DB8FF" /><Text style={[styles.transferText, { color: "#7DB8FF" }]}>Import</Text></Pressable>
@@ -230,6 +246,16 @@ const styles = StyleSheet.create({
   categoryChipActive: { backgroundColor: COLORS.greenDark, borderColor: COLORS.green },
   categoryText: { color: COLORS.muted, fontSize: 10, fontWeight: "700" },
   categoryTextActive: { color: COLORS.green },
+  tagFilterHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 5 },
+  filterLabel: { color: COLORS.muted, fontSize: 9, fontWeight: "900", letterSpacing: 0.7 },
+  clearFilters: { color: COLORS.red, fontSize: 10, fontWeight: "800" },
+  tagRow: { gap: 7, paddingBottom: 10 },
+  tagChip: { paddingHorizontal: 10, height: 29, borderRadius: 10, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, justifyContent: "center" },
+  tagChipActive: { backgroundColor: "#30215A", borderColor: "#B79AFF" },
+  tagFilterText: { color: "#B79AFF", fontSize: 10, fontWeight: "700" },
+  tagFilterTextActive: { color: "#E3D7FF" },
+  activeFilterNote: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4, marginBottom: 8 },
+  activeFilterText: { color: COLORS.muted, fontSize: 10 },
   transferRow: { flexDirection: "row", gap: 9, marginBottom: 14 },
   transferButton: { flex: 1, height: 39, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   transferText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
