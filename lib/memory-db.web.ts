@@ -2,10 +2,12 @@ export type MemoryRecord = {
   id: number;
   title: string;
   content: string;
+  category: string;
+  tags: string[];
   createdAt: string;
 };
 
-export type ImportMemoryRecord = Pick<MemoryRecord, "title" | "content"> & { createdAt?: string };
+export type ImportMemoryRecord = Pick<MemoryRecord, "title" | "content"> & { category?: string; tags?: string[]; createdAt?: string };
 
 const webMemories: MemoryRecord[] = [];
 
@@ -13,22 +15,26 @@ export async function listMemories(): Promise<MemoryRecord[]> {
   return [...webMemories];
 }
 
-export async function createMemory(title: string, content: string): Promise<MemoryRecord> {
+export async function createMemory(title: string, content: string, category = "General", tags: string[] = []): Promise<MemoryRecord> {
   const record: MemoryRecord = {
     id: Date.now(),
     title: title.trim(),
     content: content.trim(),
+    category: category.trim() || "General",
+    tags,
     createdAt: new Date().toISOString(),
   };
   webMemories.unshift(record);
   return record;
 }
 
-export async function updateMemory(id: number, title: string, content: string) {
+export async function updateMemory(id: number, title: string, content: string, category = "General", tags: string[] = []) {
   const record = webMemories.find((memory) => memory.id === id);
   if (record) {
     record.title = title.trim();
     record.content = content.trim();
+    record.category = category.trim() || "General";
+    record.tags = tags;
   }
 }
 
@@ -39,7 +45,7 @@ export async function importMemories(records: ImportMemoryRecord[]) {
     const title = record.title.trim();
     const content = record.content.trim();
     if (!title || !content || known.has(`${title}\u0000${content}`)) continue;
-    webMemories.unshift({ id: Date.now() + imported, title, content, createdAt: record.createdAt ?? new Date().toISOString() });
+    webMemories.unshift({ id: Date.now() + imported, title, content, category: record.category?.trim() || "General", tags: record.tags ?? [], createdAt: record.createdAt ?? new Date().toISOString() });
     known.add(`${title}\u0000${content}`);
     imported += 1;
   }

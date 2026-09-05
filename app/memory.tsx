@@ -30,9 +30,12 @@ export default function MemoryScreen() {
   const [editing, setEditing] = useState<MemoryRecord | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
+  const [editCategory, setEditCategory] = useState("General");
+  const [editTags, setEditTags] = useState("");
   const [status, setStatus] = useState("Memory រក្សាទុកក្នុងឧបករណ៍នេះ");
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("All");
 
   const loadMemories = useCallback(async () => {
     try {
@@ -48,14 +51,21 @@ export default function MemoryScreen() {
 
   const filteredMemories = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return memories;
-    return memories.filter((memory) => `${memory.title} ${memory.content}`.toLowerCase().includes(normalized));
-  }, [memories, query]);
+    return memories.filter((memory) => {
+      const matchesCategory = categoryFilter === "All" || memory.category === categoryFilter;
+      const matchesQuery = !normalized || `${memory.title} ${memory.content} ${memory.category} ${memory.tags.join(" ")}`.toLowerCase().includes(normalized);
+      return matchesCategory && matchesQuery;
+    });
+  }, [memories, query, categoryFilter]);
+
+  const categories = useMemo(() => ["All", ...Array.from(new Set(memories.map((memory) => memory.category).filter(Boolean)))], [memories]);
 
   const beginEdit = (memory: MemoryRecord) => {
     setEditing(memory);
     setEditTitle(memory.title);
     setEditContent(memory.content);
+    setEditCategory(memory.category);
+    setEditTags(memory.tags.join(", "));
   };
 
   const saveEdit = async () => {
@@ -63,7 +73,7 @@ export default function MemoryScreen() {
       setStatus("សូមបំពេញចំណងជើង និងមាតិកា");
       return;
     }
-    await updateMemory(editing.id, editTitle, editContent);
+    await updateMemory(editing.id, editTitle, editContent, editCategory, editTags.split(",").map((tag) => tag.trim()).filter(Boolean));
     setEditing(null);
     await loadMemories();
     setStatus("បានកែប្រែ Memory រួចរាល់");
@@ -162,6 +172,7 @@ export default function MemoryScreen() {
 
         <View style={styles.status}><View style={styles.statusDot} /><Text style={styles.statusText}>{status}</Text></View>
         <View style={styles.searchBox}><MaterialIcons name="search" size={19} color={COLORS.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="ស្វែងរក Memory…" placeholderTextColor={COLORS.muted} style={styles.searchInput} /></View>
+        <FlatList horizontal data={categories} keyExtractor={(item) => item} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow} renderItem={({ item }) => <Pressable onPress={() => setCategoryFilter(item)} style={[styles.categoryChip, categoryFilter === item && styles.categoryChipActive]}><Text style={[styles.categoryText, categoryFilter === item && styles.categoryTextActive]}>{item}</Text></Pressable>} />
         <View style={styles.transferRow}>
           {bulkMode ? <Pressable onPress={() => toggleSelectAll()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="select-all" size={17} color={COLORS.green} /><Text style={styles.transferText}>{selectedIds.length ? "បោះជ្រើស" : "ជ្រើសទាំងអស់"}</Text></Pressable> : <Pressable onPress={() => chooseExportFormat(false)} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export ទាំងអស់</Text></Pressable>}
           <Pressable onPress={() => void importBackup()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="file-upload" size={17} color="#7DB8FF" /><Text style={[styles.transferText, { color: "#7DB8FF" }]}>Import</Text></Pressable>
@@ -174,6 +185,8 @@ export default function MemoryScreen() {
             <View style={styles.editorHeader}><Text style={styles.editorTitle}>កែប្រែ Memory</Text><Pressable onPress={() => setEditing(null)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></Pressable></View>
             <TextInput value={editTitle} onChangeText={setEditTitle} placeholder="ចំណងជើង" placeholderTextColor={COLORS.muted} style={styles.input} />
             <TextInput value={editContent} onChangeText={setEditContent} multiline placeholder="មាតិកា" placeholderTextColor={COLORS.muted} style={[styles.input, styles.contentInput]} />
+            <TextInput value={editCategory} onChangeText={setEditCategory} placeholder="Category ឧ. Work, Personal" placeholderTextColor={COLORS.muted} style={styles.input} />
+            <TextInput value={editTags} onChangeText={setEditTags} placeholder="Tags ដាក់ដោយ comma" placeholderTextColor={COLORS.muted} style={styles.input} />
             <Pressable onPress={() => void saveEdit()} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}><MaterialIcons name="save" size={18} color={COLORS.bg} /><Text style={styles.primaryButtonText}>រក្សាទុកការកែប្រែ</Text></Pressable>
           </View>
         ) : null}
@@ -187,7 +200,7 @@ export default function MemoryScreen() {
             <View style={styles.memoryCard}>
               {bulkMode ? <Pressable onPress={() => toggleSelected(item.id)} style={[styles.checkbox, selectedIds.includes(item.id) && styles.checkboxSelected]}>{selectedIds.includes(item.id) ? <MaterialIcons name="check" size={15} color={COLORS.bg} /> : null}</Pressable> : null}
               <View style={styles.memoryIcon}><MaterialIcons name="sticky-note-2" size={20} color={COLORS.green} /></View>
-              <View style={styles.memoryBody}><Text style={styles.memoryTitle} numberOfLines={1}>{item.title}</Text><Text style={styles.memoryContent} numberOfLines={3}>{item.content}</Text><Text style={styles.memoryDate}>{new Date(item.createdAt).toLocaleDateString("km-KH")}</Text></View>
+              <View style={styles.memoryBody}><View style={styles.metaRow}><Text style={styles.memoryCategory}>{item.category}</Text>{item.tags.slice(0, 2).map((tag) => <Text key={tag} style={styles.tag}>#{tag}</Text>)}</View><Text style={styles.memoryTitle} numberOfLines={1}>{item.title}</Text><Text style={styles.memoryContent} numberOfLines={3}>{item.content}</Text><Text style={styles.memoryDate}>{new Date(item.createdAt).toLocaleDateString("km-KH")}</Text></View>
               <View style={styles.cardActions}><Pressable onPress={() => beginEdit(item)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><MaterialIcons name="edit" size={18} color={COLORS.green} /></Pressable><Pressable onPress={() => confirmDelete(item)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><MaterialIcons name="delete-outline" size={19} color={COLORS.red} /></Pressable></View>
             </View>
           )}
@@ -212,6 +225,11 @@ const styles = StyleSheet.create({
   statusText: { color: "#BEEACB", fontSize: 11 },
   searchBox: { height: 45, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, marginBottom: 14 },
   searchInput: { flex: 1, color: COLORS.text, fontSize: 12 },
+  categoryRow: { gap: 7, paddingBottom: 12 },
+  categoryChip: { paddingHorizontal: 12, height: 30, borderRadius: 10, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, justifyContent: "center" },
+  categoryChipActive: { backgroundColor: COLORS.greenDark, borderColor: COLORS.green },
+  categoryText: { color: COLORS.muted, fontSize: 10, fontWeight: "700" },
+  categoryTextActive: { color: COLORS.green },
   transferRow: { flexDirection: "row", gap: 9, marginBottom: 14 },
   transferButton: { flex: 1, height: 39, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   transferText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
@@ -225,6 +243,9 @@ const styles = StyleSheet.create({
   checkboxSelected: { backgroundColor: COLORS.green, borderColor: COLORS.green },
   memoryBody: { flex: 1, minWidth: 0 },
   memoryTitle: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 },
+  memoryCategory: { color: COLORS.green, fontSize: 9, fontWeight: "800" },
+  tag: { color: "#B79AFF", fontSize: 9 },
   memoryContent: { color: COLORS.muted, fontSize: 11, lineHeight: 17, marginTop: 5 },
   memoryDate: { color: COLORS.muted, fontSize: 9, marginTop: 7 },
   cardActions: { gap: 5 },

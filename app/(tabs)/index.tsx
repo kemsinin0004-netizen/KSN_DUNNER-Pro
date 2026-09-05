@@ -115,6 +115,8 @@ export default function HomeScreen() {
   const [showComposer, setShowComposer] = useState(false);
   const [showMemoryComposer, setShowMemoryComposer] = useState(false);
   const [memoryDraft, setMemoryDraft] = useState("");
+  const [memoryCategory, setMemoryCategory] = useState("General");
+  const [memoryTags, setMemoryTags] = useState("");
   const [memoryCount, setMemoryCount] = useState(0);
 
   useEffect(() => {
@@ -149,10 +151,12 @@ export default function HomeScreen() {
       return;
     }
     try {
-      await createMemory("Memory ថ្មី", memoryDraft);
+      await createMemory("Memory ថ្មី", memoryDraft, memoryCategory, memoryTags.split(",").map((tag) => tag.trim()).filter(Boolean));
       const memories = await listMemories();
       setMemoryCount(memories.length);
       setMemoryDraft("");
+      setMemoryCategory("General");
+      setMemoryTags("");
       setShowMemoryComposer(false);
       setNotice("បានរក្សាទុក Memory នៅលើឧបករណ៍នេះ");
     } catch {
@@ -223,6 +227,8 @@ export default function HomeScreen() {
           <View style={styles.composer}>
             <View style={styles.composerHeader}><Text style={styles.composerTitle}>បន្ថែម Memory</Text><Pressable onPress={() => setShowMemoryComposer(false)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></Pressable></View>
             <TextInput value={memoryDraft} onChangeText={setMemoryDraft} multiline placeholder="សរសេរ context ឬព័ត៌មានដែលអ្នកចង់ឱ្យ SkillNext ចងចាំ…" placeholderTextColor={COLORS.muted} style={[styles.input, styles.memoryInput]} />
+            <TextInput value={memoryCategory} onChangeText={setMemoryCategory} placeholder="Category ឧ. Work, Personal" placeholderTextColor={COLORS.muted} style={styles.input} />
+            <TextInput value={memoryTags} onChangeText={setMemoryTags} placeholder="Tags ដាក់ដោយ comma ឧ. client, urgent" placeholderTextColor={COLORS.muted} style={styles.input} />
             <Pressable onPress={() => void saveMemory()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed]}><MaterialIcons name="save" size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>រក្សាទុកក្នុង SQLite</Text></Pressable>
           </View>
         )}
