@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  Platform,
   View,
 } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -14,6 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import { ScreenContainer } from "@/components/screen-container";
 import { createDraftEntry, filterEntries, type SkillNextEntry } from "@/lib/skillnext-helpers";
 import { clearTelegramBot, connectTelegramBot, getSavedTelegramBot, receiveTelegramMessages, sendTelegramTestMessage, telegramBotLabel, type TelegramBotProfile, type TelegramReceivedMessage } from "@/lib/telegram-bot";
+import { isTelegramBackgroundTaskRegistered, registerTelegramBackgroundTask, unregisterTelegramBackgroundTask } from "@/lib/telegram-background";
 
 const COLORS = {
   bg: "#070B10",
@@ -91,10 +93,19 @@ export default function HomeScreen() {
   const [receivedMessages, setReceivedMessages] = useState<TelegramReceivedMessage[]>([]);
   const [receivingMessages, setReceivingMessages] = useState(false);
   const updateOffset = useRef<number | undefined>(undefined);
+  const [backgroundEnabled, setBackgroundEnabled] = useState(false);
 
   useEffect(() => {
     void getSavedTelegramBot().then(setBotProfile);
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS === "web" || !botProfile) {
+      setBackgroundEnabled(false);
+      return;
+    }
+    void isTelegramBackgroundTaskRegistered().then(setBackgroundEnabled).catch(() => setBackgroundEnabled(false));
+  }, [botProfile]);
 
   useEffect(() => {
     updateOffset.current = undefined;
@@ -152,6 +163,22 @@ export default function HomeScreen() {
     setBotProfile(null);
     setReceivedMessages([]);
     setNotice("បានផ្តាច់ Telegram Bot រួចរាល់");
+  };
+
+  const toggleBackgroundReceiving = async () => {
+    try {
+      if (backgroundEnabled) {
+        await unregisterTelegramBackgroundTask();
+        setBackgroundEnabled(false);
+        setNotice("បានបិទការទទួលសារនៅផ្ទៃខាងក្រោយ");
+      } else {
+        await registerTelegramBackgroundTask();
+        setBackgroundEnabled(true);
+        setNotice("បានបើកការទទួលសារនៅផ្ទៃខាងក្រោយ។ Android អាចដំណើរការយ៉ាងហោចណាស់រៀងរាល់ 15 នាទី");
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "មិនអាចកំណត់ Background Task បានទេ");
+    }
   };
 
   const sendTestMessage = async () => {
@@ -242,7 +269,7 @@ export default function HomeScreen() {
           <View style={styles.botCard}>
             <View style={styles.composerHeader}><View><Text style={styles.composerTitle}>Telegram Bot</Text><Text style={styles.botHint}>ភ្ជាប់ Bot ដើម្បីទទួល និងគ្រប់គ្រងសារ</Text></View><Pressable onPress={() => setShowBotConnector(false)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></Pressable></View>
             {botProfile ? (
-              <><View style={styles.botConnected}><MaterialIcons name="check-circle" size={20} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.botConnectedTitle}>{telegramBotLabel(botProfile)}</Text><Text style={styles.botHint}>Telegram Bot បានផ្ទៀងផ្ទាត់ជោគជ័យ</Text></View><Pressable onPress={() => void disconnectBot()} style={styles.disconnectButton}><Text style={styles.disconnectText}>ផ្តាច់</Text></Pressable></View><TextInput value={chatId} onChangeText={setChatId} keyboardType="default" placeholder="Chat ID ឧ. 123456789" placeholderTextColor={COLORS.muted} style={[styles.input, styles.botInput]} /><TextInput value={testMessage} onChangeText={setTestMessage} placeholder="សារសាកល្បង" placeholderTextColor={COLORS.muted} style={[styles.input, styles.botInput]} /><Pressable disabled={sendingMessage} onPress={() => void sendTestMessage()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, sendingMessage && styles.disabledButton]}><MaterialIcons name={sendingMessage ? "sync" : "send"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{sendingMessage ? "កំពុងផ្ញើ…" : "ផ្ញើ Test Message"}</Text></Pressable></>
+              <><View style={styles.botConnected}><MaterialIcons name="check-circle" size={20} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.botConnectedTitle}>{telegramBotLabel(botProfile)}</Text><Text style={styles.botHint}>Telegram Bot បានផ្ទៀងផ្ទាត់ជោគជ័យ</Text></View><Pressable onPress={() => void disconnectBot()} style={styles.disconnectButton}><Text style={styles.disconnectText}>ផ្តាច់</Text></Pressable></View><TextInput value={chatId} onChangeText={setChatId} keyboardType="default" placeholder="Chat ID ឧ. 123456789" placeholderTextColor={COLORS.muted} style={[styles.input, styles.botInput]} /><TextInput value={testMessage} onChangeText={setTestMessage} placeholder="សារសាកល្បង" placeholderTextColor={COLORS.muted} style={[styles.input, styles.botInput]} /><Pressable disabled={sendingMessage} onPress={() => void sendTestMessage()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, sendingMessage && styles.disabledButton]}><MaterialIcons name={sendingMessage ? "sync" : "send"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{sendingMessage ? "កំពុងផ្ញើ…" : "ផ្ញើ Test Message"}</Text></Pressable>{Platform.OS !== "web" ? <Pressable onPress={() => void toggleBackgroundReceiving()} style={styles.backgroundToggle}><MaterialIcons name={backgroundEnabled ? "notifications-active" : "notifications-none"} size={18} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.backgroundTitle}>{backgroundEnabled ? "ទទួលសារនៅផ្ទៃខាងក្រោយ: បើក" : "បើកទទួលសារនៅផ្ទៃខាងក្រោយ"}</Text><Text style={styles.botHint}>Android ពិនិត្យតាមពេលវេលាដែលប្រព័ន្ធកំណត់ (យ៉ាងហោចណាស់ 15 នាទី)</Text></View><MaterialIcons name="chevron-right" size={18} color={COLORS.muted} /></Pressable> : null}</>
             ) : (
               <><TextInput value={botToken} onChangeText={setBotToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="123456789:AA... Bot Token" placeholderTextColor={COLORS.muted} style={styles.input} /><Text style={styles.botHint}>រក Token នៅក្នុង Telegram: @BotFather → /newbot</Text><Pressable disabled={botLoading} onPress={() => void connectBot()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, botLoading && styles.disabledButton]}><MaterialIcons name={botLoading ? "sync" : "link"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{botLoading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ភ្ជាប់ និងផ្ទៀងផ្ទាត់"}</Text></Pressable></>
             )}
@@ -339,6 +366,8 @@ const styles = StyleSheet.create({
   botConnected: { flexDirection: "row", alignItems: "center", gap: 9, padding: 10, borderRadius: 12, backgroundColor: COLORS.surface },
   botConnectedTitle: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
   botInput: { marginTop: 9 },
+  backgroundToggle: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 11, padding: 10, borderRadius: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
+  backgroundTitle: { color: COLORS.text, fontSize: 10, fontWeight: "800" },
   disconnectButton: { borderWidth: 1, borderColor: "#733A42", borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 },
   disconnectText: { color: "#FF9A9A", fontSize: 10, fontWeight: "800" },
   disabledButton: { opacity: 0.6 },
