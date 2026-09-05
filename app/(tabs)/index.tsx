@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { createDraftEntry, filterEntries, type SkillNextEntry } from "@/lib/skillnext-helpers";
+import { clearTelegramBot, connectTelegramBot, getSavedTelegramBot, telegramBotLabel, type TelegramBotProfile } from "@/lib/telegram-bot";
 
 const COLORS = {
   bg: "#070B10",
@@ -80,6 +81,14 @@ export default function HomeScreen() {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("ស្វាគមន៍មកកាន់ SkillNext");
   const [showComposer, setShowComposer] = useState(false);
+  const [showBotConnector, setShowBotConnector] = useState(false);
+  const [botToken, setBotToken] = useState("");
+  const [botProfile, setBotProfile] = useState<TelegramBotProfile | null>(null);
+  const [botLoading, setBotLoading] = useState(false);
+
+  useEffect(() => {
+    void getSavedTelegramBot().then(setBotProfile);
+  }, []);
 
   const filteredEntries = useMemo(() => filterEntries(entries, query), [entries, query]);
 
@@ -90,8 +99,29 @@ export default function HomeScreen() {
     } else if (label === "AI ជួយខ្ញុំ") {
       setNotice("AI កំពុងរៀបចំជំនួយសម្រាប់អ្នក…");
     } else {
-      setNotice("ការភ្ជាប់ Telegram Bot នឹងមានក្នុងជំហានបន្ទាប់");
+      setShowBotConnector(true);
+      setNotice(botProfile ? `Bot ${telegramBotLabel(botProfile)} បានភ្ជាប់រួចរាល់` : "សូមបញ្ចូល Bot Token ពី @BotFather");
     }
+  };
+
+  const connectBot = async () => {
+    setBotLoading(true);
+    try {
+      const profile = await connectTelegramBot(botToken);
+      setBotProfile(profile);
+      setBotToken("");
+      setNotice(`បានភ្ជាប់ ${telegramBotLabel(profile)} ជោគជ័យ`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "ភ្ជាប់ Telegram Bot មិនបានសម្រេចទេ");
+    } finally {
+      setBotLoading(false);
+    }
+  };
+
+  const disconnectBot = async () => {
+    await clearTelegramBot();
+    setBotProfile(null);
+    setNotice("បានផ្តាច់ Telegram Bot រួចរាល់");
   };
 
   const createEntry = () => {
@@ -166,6 +196,17 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {showBotConnector && (
+          <View style={styles.botCard}>
+            <View style={styles.composerHeader}><View><Text style={styles.composerTitle}>Telegram Bot</Text><Text style={styles.botHint}>ភ្ជាប់ Bot ដើម្បីទទួល និងគ្រប់គ្រងសារ</Text></View><Pressable onPress={() => setShowBotConnector(false)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></Pressable></View>
+            {botProfile ? (
+              <View style={styles.botConnected}><MaterialIcons name="check-circle" size={20} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.botConnectedTitle}>{telegramBotLabel(botProfile)}</Text><Text style={styles.botHint}>Telegram Bot បានផ្ទៀងផ្ទាត់ជោគជ័យ</Text></View><Pressable onPress={() => void disconnectBot()} style={styles.disconnectButton}><Text style={styles.disconnectText}>ផ្តាច់</Text></Pressable></View>
+            ) : (
+              <><TextInput value={botToken} onChangeText={setBotToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="123456789:AA... Bot Token" placeholderTextColor={COLORS.muted} style={styles.input} /><Text style={styles.botHint}>រក Token នៅក្នុង Telegram: @BotFather → /newbot</Text><Pressable disabled={botLoading} onPress={() => void connectBot()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, botLoading && styles.disabledButton]}><MaterialIcons name={botLoading ? "sync" : "link"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{botLoading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ភ្ជាប់ និងផ្ទៀងផ្ទាត់"}</Text></Pressable></>
+            )}
+          </View>
+        )}
+
         <View style={styles.sectionHeaderRecent}>
           <View><Text style={styles.sectionTitle}>ការងារថ្មីៗ</Text><Text style={styles.sectionHint}>បន្តពីកន្លែងដែលអ្នកបានឈប់</Text></View>
           <Pressable onPress={() => setNotice("បង្ហាញការងារទាំងអស់") }><Text style={styles.viewAll}>មើលទាំងអស់</Text></Pressable>
@@ -233,8 +274,15 @@ const styles = StyleSheet.create({
   actionLabel: { color: COLORS.text, fontSize: 10, fontWeight: "700" },
   pressed: { opacity: 0.72 },
   composer: { marginTop: 16, padding: 15, borderRadius: 18, backgroundColor: COLORS.surface2, borderWidth: 1, borderColor: "#355742" },
+  botCard: { marginTop: 16, padding: 15, borderRadius: 18, backgroundColor: "#0D2118", borderWidth: 1, borderColor: "#2A744A" },
   composerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 11 },
   composerTitle: { color: COLORS.text, fontSize: 15, fontWeight: "800" },
+  botHint: { color: COLORS.muted, fontSize: 10, lineHeight: 16 },
+  botConnected: { flexDirection: "row", alignItems: "center", gap: 9, padding: 10, borderRadius: 12, backgroundColor: COLORS.surface },
+  botConnectedTitle: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
+  disconnectButton: { borderWidth: 1, borderColor: "#733A42", borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 },
+  disconnectText: { color: "#FF9A9A", fontSize: 10, fontWeight: "800" },
+  disabledButton: { opacity: 0.6 },
   input: { height: 45, borderRadius: 11, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.bg, color: COLORS.text, paddingHorizontal: 12, fontSize: 12 },
   saveButton: { marginTop: 11, height: 43, borderRadius: 11, backgroundColor: COLORS.green, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
   saveButtonText: { color: COLORS.bg, fontSize: 12, fontWeight: "900" },
