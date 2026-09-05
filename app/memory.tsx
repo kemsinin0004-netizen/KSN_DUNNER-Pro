@@ -8,7 +8,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { createSavedFilter, deleteMemory, deleteSavedFilter, importMemories, listMemories, listSavedFilters, markSavedFilterUsed, updateMemory, type MemoryRecord, type SavedFilter } from "@/lib/memory-db";
+import { createSavedFilter, deleteMemory, deleteSavedFilter, importMemories, listMemories, listSavedFilters, markSavedFilterUsed, toggleSavedFilterPinned, updateMemory, type MemoryRecord, type SavedFilter } from "@/lib/memory-db";
 import { memoriesToJson, memoriesToMarkdown, parseMemoryImport } from "@/lib/memory-transfer";
 
 const COLORS = {
@@ -185,6 +185,12 @@ export default function MemoryScreen() {
     setStatus(`បានលុប Filter “${filter.name}”`);
   };
 
+  const togglePinned = async (filter: SavedFilter) => {
+    await toggleSavedFilterPinned(filter.id, !filter.pinned);
+    setSavedFilters(await listSavedFilters());
+    setStatus(filter.pinned ? `បានដក Pin ពី “${filter.name}”` : `បាន Pin “${filter.name}” នៅខាងលើ`);
+  };
+
   const importBackup = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -223,7 +229,7 @@ export default function MemoryScreen() {
         {selectedTags.length ? <View style={styles.activeFilterNote}><MaterialIcons name="filter-list" size={14} color={COLORS.green} /><Text style={styles.activeFilterText}>បង្ហាញ Memory ដែលមានគ្រប់ {selectedTags.length} Tags ដែលបានជ្រើស</Text></View> : null}
         <View style={styles.savedHeader}><Text style={styles.filterLabel}>SAVED FILTERS</Text><Pressable onPress={() => setShowSaveFilter((current) => !current)}><Text style={styles.saveFilterLink}>{showSaveFilter ? "បិទ" : "+ រក្សាទុក Filter"}</Text></Pressable></View>
         {showSaveFilter ? <View style={styles.saveFilterCard}><TextInput value={filterName} onChangeText={setFilterName} placeholder="ឈ្មោះ Filter ឧ. Work urgent" placeholderTextColor={COLORS.muted} style={styles.input} /><Pressable onPress={() => void saveCurrentFilter()} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}><MaterialIcons name="bookmark-add" size={17} color={COLORS.bg} /><Text style={styles.primaryButtonText}>រក្សាទុក Filter នេះ</Text></Pressable></View> : null}
-        {savedFilters.length ? <FlatList horizontal data={savedFilters} keyExtractor={(item) => String(item.id)} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedRow} renderItem={({ item }) => <View style={styles.savedChip}><Pressable onPress={() => void applySavedFilter(item)}><Text style={styles.savedName} numberOfLines={1}>{item.name}</Text><Text style={styles.savedDetails} numberOfLines={1}>{item.category === "All" ? "All" : item.category}{item.tags.length ? ` · ${item.tags.map((tag) => `#${tag}`).join(" ")}` : ""}</Text><Text style={styles.savedUsage} numberOfLines={1}>{item.useCount ? `ប្រើ ${item.useCount} ដង` : "មិនទាន់ប្រើ"}</Text></Pressable><Pressable onPress={() => void removeSavedFilter(item)} style={styles.savedDelete}><MaterialIcons name="close" size={13} color={COLORS.red} /></Pressable></View>} /> : null}
+        {savedFilters.length ? <FlatList horizontal data={savedFilters} keyExtractor={(item) => String(item.id)} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedRow} renderItem={({ item }) => <View style={[styles.savedChip, item.pinned && styles.savedChipPinned]}><Pressable onPress={() => void applySavedFilter(item)} style={styles.savedMain}><Text style={styles.savedName} numberOfLines={1}>{item.pinned ? "📌 " : ""}{item.name}</Text><Text style={styles.savedDetails} numberOfLines={1}>{item.category === "All" ? "All" : item.category}{item.tags.length ? ` · ${item.tags.map((tag) => `#${tag}`).join(" ")}` : ""}</Text><Text style={styles.savedUsage} numberOfLines={1}>{item.useCount ? `ប្រើ ${item.useCount} ដង` : "មិនទាន់ប្រើ"}</Text></Pressable><View style={styles.savedActions}><Pressable onPress={() => void togglePinned(item)} style={styles.savedAction}><MaterialIcons name={item.pinned ? "push-pin" : "push-pin"} size={14} color={item.pinned ? COLORS.green : COLORS.muted} /></Pressable><Pressable onPress={() => void removeSavedFilter(item)} style={styles.savedAction}><MaterialIcons name="close" size={13} color={COLORS.red} /></Pressable></View></View>} /> : null}
         <View style={styles.transferRow}>
           {bulkMode ? <Pressable onPress={() => toggleSelectAll()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="select-all" size={17} color={COLORS.green} /><Text style={styles.transferText}>{selectedIds.length ? "បោះជ្រើស" : "ជ្រើសទាំងអស់"}</Text></Pressable> : <Pressable onPress={() => chooseExportFormat(false)} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export ទាំងអស់</Text></Pressable>}
           <Pressable onPress={() => void importBackup()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="file-upload" size={17} color="#7DB8FF" /><Text style={[styles.transferText, { color: "#7DB8FF" }]}>Import</Text></Pressable>
@@ -296,10 +302,13 @@ const styles = StyleSheet.create({
   saveFilterCard: { padding: 11, borderRadius: 14, backgroundColor: COLORS.surface2, borderWidth: 1, borderColor: "#355742", marginBottom: 9 },
   savedRow: { gap: 8, paddingBottom: 11 },
   savedChip: { minWidth: 125, maxWidth: 190, flexDirection: "row", alignItems: "center", gap: 5, paddingLeft: 10, paddingRight: 6, paddingVertical: 7, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
+  savedChipPinned: { borderColor: COLORS.green, backgroundColor: "#0D2118" },
+  savedMain: { flex: 1 },
   savedName: { color: COLORS.text, fontSize: 10, fontWeight: "800" },
   savedDetails: { color: COLORS.muted, fontSize: 8, marginTop: 3 },
   savedUsage: { color: COLORS.green, fontSize: 8, marginTop: 2 },
-  savedDelete: { padding: 4 },
+  savedActions: { gap: 2 },
+  savedAction: { padding: 4 },
   transferRow: { flexDirection: "row", gap: 9, marginBottom: 14 },
   transferButton: { flex: 1, height: 39, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   transferText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },

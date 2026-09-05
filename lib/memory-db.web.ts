@@ -8,7 +8,7 @@ export type MemoryRecord = {
 };
 
 export type ImportMemoryRecord = Pick<MemoryRecord, "title" | "content"> & { category?: string; tags?: string[]; createdAt?: string };
-export type SavedFilter = { id: number; name: string; query: string; category: string; tags: string[]; lastUsedAt: string | null; useCount: number };
+export type SavedFilter = { id: number; name: string; query: string; category: string; tags: string[]; lastUsedAt: string | null; useCount: number; pinned: boolean };
 
 const webMemories: MemoryRecord[] = [];
 const webSavedFilters: SavedFilter[] = [];
@@ -60,11 +60,11 @@ export async function deleteMemory(id: number) {
 }
 
 export async function listSavedFilters(): Promise<SavedFilter[]> {
-  return [...webSavedFilters].sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? ""));
+  return [...webSavedFilters].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? ""));
 }
 
 export async function createSavedFilter(name: string, query: string, category: string, tags: string[]) {
-  const filter = { id: Date.now(), name: name.trim(), query: query.trim(), category, tags, lastUsedAt: null, useCount: 0 };
+  const filter = { id: Date.now(), name: name.trim(), query: query.trim(), category, tags, lastUsedAt: null, useCount: 0, pinned: false };
   webSavedFilters.unshift(filter);
   return filter;
 }
@@ -80,4 +80,9 @@ export async function markSavedFilterUsed(id: number) {
     filter.lastUsedAt = new Date().toISOString();
     filter.useCount += 1;
   }
+}
+
+export async function toggleSavedFilterPinned(id: number, pinned: boolean) {
+  const filter = webSavedFilters.find((item) => item.id === id);
+  if (filter) filter.pinned = pinned;
 }
