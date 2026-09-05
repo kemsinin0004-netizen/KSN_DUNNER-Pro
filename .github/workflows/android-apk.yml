@@ -97,6 +97,34 @@ jobs:
           generate_release_notes: true
           files: artifacts/*.apk
 
+      - name: Notify Telegram about successful APK release
+        if: success() && github.event_name != 'pull_request'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ github.run_number }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram secrets are not configured; skipping notification."
+            exit 0
+          fi
+
+          MESSAGE=$(cat <<EOF
+          ✅ SkillNext APK និង GitHub Release បានបង្កើតជោគជ័យ
+
+          Repository: $GITHUB_REPOSITORY
+          Tag: v$GITHUB_RUN_NUMBER
+
+          ទាញយក APK: $RELEASE_URL
+          EOF
+          )
+
+          curl --fail --silent --show-error --retry 3 \
+            --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}" \
+            --data-urlencode "disable_web_page_preview=true"
+
       - name: Print installation instructions
         run: |
           echo "APK artifact created successfully."
