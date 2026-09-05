@@ -6,7 +6,6 @@
       "node",
       "nativewind/types"
     ],
-    "moduleSuffixes": [".native", ""],
     "paths": {
       "@/*": [
         "./*"

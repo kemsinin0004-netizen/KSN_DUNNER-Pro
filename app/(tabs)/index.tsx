@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -14,7 +13,6 @@ import { StatusBar } from "expo-status-bar";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { createDraftEntry, filterEntries, type SkillNextEntry } from "@/lib/skillnext-helpers";
-import { createMemory, listMemories } from "@/lib/memory-db";
 
 const COLORS = {
   bg: "#070B10",
@@ -76,54 +74,12 @@ function EntryCard({ item, onPress }: { item: Entry; onPress: () => void }) {
   );
 }
 
-function InsightCard({
-  icon,
-  eyebrow,
-  title,
-  detail,
-  accent,
-  action,
-  onPress,
-}: {
-  icon: keyof typeof MaterialIcons.glyphMap;
-  eyebrow: string;
-  title: string;
-  detail: string;
-  accent: string;
-  action: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.insightCard, pressed && styles.cardPressed]}>
-      <View style={[styles.insightIcon, { backgroundColor: `${accent}18` }]}>
-        <MaterialIcons name={icon} size={20} color={accent} />
-      </View>
-      <Text style={styles.insightEyebrow}>{eyebrow}</Text>
-      <Text style={styles.insightTitle} numberOfLines={1}>{title}</Text>
-      <Text style={styles.insightDetail} numberOfLines={2}>{detail}</Text>
-      <View style={styles.insightAction}><Text style={[styles.insightActionText, { color: accent }]}>{action}</Text><MaterialIcons name="arrow-forward" size={14} color={accent} /></View>
-    </Pressable>
-  );
-}
-
 export default function HomeScreen() {
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState("ទំព័រដើម");
   const [entries, setEntries] = useState(INITIAL_ENTRIES);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("ស្វាគមន៍មកកាន់ SkillNext");
   const [showComposer, setShowComposer] = useState(false);
-  const [showMemoryComposer, setShowMemoryComposer] = useState(false);
-  const [memoryDraft, setMemoryDraft] = useState("");
-  const [memoryCategory, setMemoryCategory] = useState("General");
-  const [memoryTags, setMemoryTags] = useState("");
-  const [memoryCount, setMemoryCount] = useState(0);
-
-  useEffect(() => {
-    void listMemories().then((memories) => setMemoryCount(memories.length)).catch(() => {
-      setNotice("Memory local កំពុងរង់ចាំ Android SQLite build");
-    });
-  }, []);
 
   const filteredEntries = useMemo(() => filterEntries(entries, query), [entries, query]);
 
@@ -143,25 +99,6 @@ export default function HomeScreen() {
     setEntries((current) => [next, ...current]);
     setShowComposer(false);
     setNotice("បានរក្សាទុកកិច្ចការថ្មី");
-  };
-
-  const saveMemory = async () => {
-    if (!memoryDraft.trim()) {
-      setNotice("សូមសរសេរ Memory មុនពេលរក្សាទុក");
-      return;
-    }
-    try {
-      await createMemory("Memory ថ្មី", memoryDraft, memoryCategory, memoryTags.split(",").map((tag) => tag.trim()).filter(Boolean));
-      const memories = await listMemories();
-      setMemoryCount(memories.length);
-      setMemoryDraft("");
-      setMemoryCategory("General");
-      setMemoryTags("");
-      setShowMemoryComposer(false);
-      setNotice("បានរក្សាទុក Memory នៅលើឧបករណ៍នេះ");
-    } catch {
-      setNotice("មិនអាចរក្សាទុក Memory បានទេ សូមសាកល្បងម្តងទៀត");
-    }
   };
 
   const handleEntryPress = (title: string) => setNotice(`កំពុងបើក ${title}`);
@@ -212,26 +149,6 @@ export default function HomeScreen() {
         </View>
 
         {notice ? <View style={styles.notice}><MaterialIcons name="info-outline" size={16} color={COLORS.green} /><Text style={styles.noticeText}>{notice}</Text></View> : null}
-
-        <View style={styles.sectionHeaderInsights}>
-          <View><Text style={styles.sectionTitle}>កន្លែងរបស់អ្នក</Text><Text style={styles.sectionHint}>ព័ត៌មានសំខាន់ៗ មើលឃើញភ្លាមៗ</Text></View>
-          <View style={styles.localBadge}><View style={styles.localBadgeDot} /><Text style={styles.localBadgeText}>LOCAL</Text></View>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightRow}>
-          <InsightCard icon="psychology" eyebrow="MEMORY" title={`${memoryCount} Memories`} detail="រក្សាទុក context របស់អ្នកនៅលើឧបករណ៍" accent={COLORS.green} action="មើល Memory" onPress={() => router.push("/memory")} />
-          <InsightCard icon="edit-note" eyebrow="DAILY NOTES" title="កំណត់ត្រាថ្ងៃនេះ" detail="កត់ត្រាគំនិត និងកិច្ចការសំខាន់ៗ" accent={COLORS.blue} action="បន្ថែម Note" onPress={() => setNotice("បើកកំណត់ត្រាថ្មីសម្រាប់ថ្ងៃនេះ")} />
-          <InsightCard icon="cloud" eyebrow="WEATHER" title="ភ្នំពេញ" detail="អាកាសធាតុ · ពិនិត្យតាមតំបន់របស់អ្នក" accent={COLORS.amber} action="ធ្វើបច្ចុប្បន្នភាព" onPress={() => setNotice("អាកាសធាតុត្រូវបានធ្វើបច្ចុប្បន្នភាព")} />
-        </ScrollView>
-
-        {showMemoryComposer && (
-          <View style={styles.composer}>
-            <View style={styles.composerHeader}><Text style={styles.composerTitle}>បន្ថែម Memory</Text><Pressable onPress={() => setShowMemoryComposer(false)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></Pressable></View>
-            <TextInput value={memoryDraft} onChangeText={setMemoryDraft} multiline placeholder="សរសេរ context ឬព័ត៌មានដែលអ្នកចង់ឱ្យ SkillNext ចងចាំ…" placeholderTextColor={COLORS.muted} style={[styles.input, styles.memoryInput]} />
-            <TextInput value={memoryCategory} onChangeText={setMemoryCategory} placeholder="Category ឧ. Work, Personal" placeholderTextColor={COLORS.muted} style={styles.input} />
-            <TextInput value={memoryTags} onChangeText={setMemoryTags} placeholder="Tags ដាក់ដោយ comma ឧ. client, urgent" placeholderTextColor={COLORS.muted} style={styles.input} />
-            <Pressable onPress={() => void saveMemory()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed]}><MaterialIcons name="save" size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>រក្សាទុកក្នុង SQLite</Text></Pressable>
-          </View>
-        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>ចាប់ផ្តើមរហ័ស</Text>
@@ -308,20 +225,8 @@ const styles = StyleSheet.create({
   noticeText: { color: "#BEEACB", fontSize: 11, flex: 1 },
   sectionHeader: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 },
   sectionHeaderRecent: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 27, marginBottom: 13 },
-  sectionHeaderInsights: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 24, marginBottom: 13 },
   sectionTitle: { color: COLORS.text, fontSize: 17, fontWeight: "800" },
   sectionHint: { color: COLORS.muted, fontSize: 11, marginTop: 3 },
-  localBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: "#0D2118", borderWidth: 1, borderColor: "#234B32" },
-  localBadgeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.green },
-  localBadgeText: { color: COLORS.green, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
-  insightRow: { gap: 10, paddingRight: 20 },
-  insightCard: { width: 148, minHeight: 173, padding: 14, borderRadius: 18, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
-  insightIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  insightEyebrow: { color: COLORS.muted, fontSize: 8, fontWeight: "900", letterSpacing: 1.2, marginBottom: 5 },
-  insightTitle: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
-  insightDetail: { color: COLORS.muted, fontSize: 10, lineHeight: 15, marginTop: 5, flex: 1 },
-  insightAction: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 12 },
-  insightActionText: { fontSize: 10, fontWeight: "800" },
   actionRow: { flexDirection: "row", gap: 9 },
   actionButton: { flex: 1, paddingVertical: 13, borderRadius: 16, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, alignItems: "center", gap: 8 },
   actionIcon: { width: 39, height: 39, borderRadius: 13, alignItems: "center", justifyContent: "center" },
@@ -331,7 +236,6 @@ const styles = StyleSheet.create({
   composerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 11 },
   composerTitle: { color: COLORS.text, fontSize: 15, fontWeight: "800" },
   input: { height: 45, borderRadius: 11, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.bg, color: COLORS.text, paddingHorizontal: 12, fontSize: 12 },
-  memoryInput: { height: 86, paddingTop: 12, textAlignVertical: "top" },
   saveButton: { marginTop: 11, height: 43, borderRadius: 11, backgroundColor: COLORS.green, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
   saveButtonText: { color: COLORS.bg, fontSize: 12, fontWeight: "900" },
   viewAll: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
