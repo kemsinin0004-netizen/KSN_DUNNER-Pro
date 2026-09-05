@@ -16,6 +16,19 @@ type TelegramResponse = {
   description?: string;
 };
 
+export type TelegramReceivedMessage = {
+  updateId: number;
+  chatId: string;
+  chatTitle: string;
+  senderName: string;
+  text: string;
+  receivedAt: string;
+};
+
+type TelegramUpdatesResponse = TelegramResponse & {
+  result?: Array<{ update_id: number; message?: { text?: string; date: number; chat: { id: number; title?: string; username?: string; first_name?: string }; from?: { first_name?: string; username?: string } } }>;
+};
+
 export async function sendTelegramTestMessage(chatId: string, text: string) {
   const token = await readToken();
   if (!token) throw new Error("សូមភ្ជាប់ Telegram Bot ជាមុនសិន");
@@ -32,6 +45,32 @@ export async function sendTelegramTestMessage(chatId: string, text: string) {
   if (!response.ok || !payload.ok) {
     throw new Error(payload.description || "Telegram មិនអាចផ្ញើសារបានទេ។ ពិនិត្យ Chat ID ហើយចាប់ផ្តើម chat ជាមួយ Bot ជាមុនសិន។");
   }
+}
+
+export async function receiveTelegramMessages(offset?: number): Promise<{ messages: TelegramReceivedMessage[]; nextOffset?: number }> {
+  const token = await readToken();
+  if (!token) throw new Error("សូមភ្ជាប់ Telegram Bot ជាមុនសិន");
+  const params = new URLSearchParams({ timeout: "0", limit: "50" });
+  if (offset !== undefined) params.set("offset", String(offset));
+  const response = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/getUpdates?${params.toString()}`);
+  const payload = (await response.json()) as TelegramUpdatesResponse;
+  if (!response.ok || !payload.ok || !Array.isArray(payload.result)) {
+    throw new Error(payload.description || "មិនអាចទទួលសារ Telegram បានទេ");
+  }
+  const messages = payload.result.flatMap((update) => {
+    const message = update.message;
+    if (!message?.text) return [];
+    return [{
+      updateId: update.update_id,
+      chatId: String(message.chat.id),
+      chatTitle: message.chat.title || message.chat.username || message.chat.first_name || String(message.chat.id),
+      senderName: message.from?.username ? `@${message.from.username}` : message.from?.first_name || "Telegram user",
+      text: message.text,
+      receivedAt: new Date(message.date * 1000).toISOString(),
+    }];
+  });
+  const nextOffset = payload.result.length ? Math.max(...payload.result.map((item) => item.update_id)) + 1 : offset;
+  return { messages, nextOffset };
 }
 
 async function readToken() {

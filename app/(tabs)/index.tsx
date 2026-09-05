@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -13,7 +13,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { createDraftEntry, filterEntries, type SkillNextEntry } from "@/lib/skillnext-helpers";
-import { clearTelegramBot, connectTelegramBot, getSavedTelegramBot, sendTelegramTestMessage, telegramBotLabel, type TelegramBotProfile } from "@/lib/telegram-bot";
+import { clearTelegramBot, connectTelegramBot, getSavedTelegramBot, receiveTelegramMessages, sendTelegramTestMessage, telegramBotLabel, type TelegramBotProfile, type TelegramReceivedMessage } from "@/lib/telegram-bot";
 
 const COLORS = {
   bg: "#070B10",
@@ -88,10 +88,35 @@ export default function HomeScreen() {
   const [chatId, setChatId] = useState("");
   const [testMessage, setTestMessage] = useState("សួស្តីពី SkillNext Bot!");
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [receivedMessages, setReceivedMessages] = useState<TelegramReceivedMessage[]>([]);
+  const [receivingMessages, setReceivingMessages] = useState(false);
+  const updateOffset = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     void getSavedTelegramBot().then(setBotProfile);
   }, []);
+
+  useEffect(() => {
+    updateOffset.current = undefined;
+    if (!botProfile) return;
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      setReceivingMessages(true);
+      try {
+        const result = await receiveTelegramMessages(updateOffset.current);
+        if (result.nextOffset !== undefined) updateOffset.current = result.nextOffset;
+        if (result.messages.length) setReceivedMessages((current) => [...result.messages, ...current].slice(0, 30));
+      } catch (error) {
+        if (active) setNotice(error instanceof Error ? error.message : "មិនអាចទទួលសារ Telegram បានទេ");
+      } finally {
+        if (active) setReceivingMessages(false);
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 5000);
+    return () => { active = false; clearInterval(timer); };
+  }, [botProfile]);
 
   const filteredEntries = useMemo(() => filterEntries(entries, query), [entries, query]);
 
@@ -112,6 +137,7 @@ export default function HomeScreen() {
     try {
       const profile = await connectTelegramBot(botToken);
       setBotProfile(profile);
+      setReceivedMessages([]);
       setBotToken("");
       setNotice(`បានភ្ជាប់ ${telegramBotLabel(profile)} ជោគជ័យ`);
     } catch (error) {
@@ -124,6 +150,7 @@ export default function HomeScreen() {
   const disconnectBot = async () => {
     await clearTelegramBot();
     setBotProfile(null);
+    setReceivedMessages([]);
     setNotice("បានផ្តាច់ Telegram Bot រួចរាល់");
   };
 
@@ -222,6 +249,13 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {botProfile && (
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}><View><Text style={styles.composerTitle}>សារចូលពី Telegram</Text><Text style={styles.botHint}>{receivingMessages ? "កំពុងពិនិត្យសារថ្មី…" : `${receivedMessages.length} សារត្រូវបានទទួល`}</Text></View><MaterialIcons name={receivingMessages ? "sync" : "mark-chat-read"} size={19} color={COLORS.green} /></View>
+            {receivedMessages.length ? receivedMessages.slice(0, 5).map((message) => <View key={message.updateId} style={styles.messageCard}><View style={styles.messageHeader}><Text style={styles.messageSender}>{message.senderName}</Text><Text style={styles.messageChat}>{message.chatTitle}</Text></View><Text style={styles.messageText}>{message.text}</Text><Text style={styles.messageTime}>{new Date(message.receivedAt).toLocaleTimeString("km-KH", { hour: "2-digit", minute: "2-digit" })}</Text></View>) : <Text style={styles.emptyMessages}>ផ្ញើសារទៅកាន់ Bot របស់អ្នក ដើម្បីឲ្យវាបង្ហាញនៅទីនេះ</Text>}
+          </View>
+        )}
+
         <View style={styles.sectionHeaderRecent}>
           <View><Text style={styles.sectionTitle}>ការងារថ្មីៗ</Text><Text style={styles.sectionHint}>បន្តពីកន្លែងដែលអ្នកបានឈប់</Text></View>
           <Pressable onPress={() => setNotice("បង្ហាញការងារទាំងអស់") }><Text style={styles.viewAll}>មើលទាំងអស់</Text></Pressable>
@@ -290,6 +324,15 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.72 },
   composer: { marginTop: 16, padding: 15, borderRadius: 18, backgroundColor: COLORS.surface2, borderWidth: 1, borderColor: "#355742" },
   botCard: { marginTop: 16, padding: 15, borderRadius: 18, backgroundColor: "#0D2118", borderWidth: 1, borderColor: "#2A744A" },
+  inboxCard: { marginTop: 16, padding: 15, borderRadius: 18, backgroundColor: COLORS.surface2, borderWidth: 1, borderColor: COLORS.line },
+  inboxHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 11 },
+  messageCard: { padding: 10, borderRadius: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, marginBottom: 7 },
+  messageHeader: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  messageSender: { color: COLORS.green, fontSize: 10, fontWeight: "800" },
+  messageChat: { color: COLORS.muted, fontSize: 9, flexShrink: 1 },
+  messageText: { color: COLORS.text, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  messageTime: { color: COLORS.muted, fontSize: 8, textAlign: "right", marginTop: 5 },
+  emptyMessages: { color: COLORS.muted, fontSize: 10, lineHeight: 16 },
   composerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 11 },
   composerTitle: { color: COLORS.text, fontSize: 15, fontWeight: "800" },
   botHint: { color: COLORS.muted, fontSize: 10, lineHeight: 16 },
