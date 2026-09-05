@@ -8,8 +8,10 @@ export type MemoryRecord = {
 };
 
 export type ImportMemoryRecord = Pick<MemoryRecord, "title" | "content"> & { category?: string; tags?: string[]; createdAt?: string };
+export type SavedFilter = { id: number; name: string; query: string; category: string; tags: string[] };
 
 const webMemories: MemoryRecord[] = [];
+const webSavedFilters: SavedFilter[] = [];
 
 export async function listMemories(): Promise<MemoryRecord[]> {
   return [...webMemories];
@@ -55,4 +57,19 @@ export async function importMemories(records: ImportMemoryRecord[]) {
 export async function deleteMemory(id: number) {
   const index = webMemories.findIndex((memory) => memory.id === id);
   if (index >= 0) webMemories.splice(index, 1);
+}
+
+export async function listSavedFilters(): Promise<SavedFilter[]> {
+  return [...webSavedFilters];
+}
+
+export async function createSavedFilter(name: string, query: string, category: string, tags: string[]) {
+  const filter = { id: Date.now(), name: name.trim(), query: query.trim(), category, tags };
+  webSavedFilters.unshift(filter);
+  return filter;
+}
+
+export async function deleteSavedFilter(id: number) {
+  const index = webSavedFilters.findIndex((filter) => filter.id === id);
+  if (index >= 0) webSavedFilters.splice(index, 1);
 }

@@ -8,7 +8,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { deleteMemory, importMemories, listMemories, updateMemory, type MemoryRecord } from "@/lib/memory-db";
+import { createSavedFilter, deleteMemory, deleteSavedFilter, importMemories, listMemories, listSavedFilters, updateMemory, type MemoryRecord, type SavedFilter } from "@/lib/memory-db";
 import { memoriesToJson, memoriesToMarkdown, parseMemoryImport } from "@/lib/memory-transfer";
 
 const COLORS = {
@@ -37,10 +37,14 @@ export default function MemoryScreen() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [showSaveFilter, setShowSaveFilter] = useState(false);
+  const [filterName, setFilterName] = useState("");
 
   const loadMemories = useCallback(async () => {
     try {
       setMemories(await listMemories());
+      setSavedFilters(await listSavedFilters());
     } catch {
       setStatus("មិនអាចអាន SQLite បានទេ");
     }
@@ -153,6 +157,32 @@ export default function MemoryScreen() {
     setQuery("");
   };
 
+  const saveCurrentFilter = async () => {
+    if (!query.trim() && categoryFilter === "All" && !selectedTags.length) {
+      setStatus("សូមជ្រើស Category, Tags ឬសរសេរ Search មុនពេលរក្សាទុក");
+      return;
+    }
+    const name = filterName.trim() || `Filter ${savedFilters.length + 1}`;
+    await createSavedFilter(name, query, categoryFilter, selectedTags);
+    setSavedFilters(await listSavedFilters());
+    setFilterName("");
+    setShowSaveFilter(false);
+    setStatus(`បានរក្សាទុក Filter “${name}”`);
+  };
+
+  const applySavedFilter = (filter: SavedFilter) => {
+    setQuery(filter.query);
+    setCategoryFilter(filter.category);
+    setSelectedTags(filter.tags);
+    setStatus(`បានអនុវត្ត Filter “${filter.name}”`);
+  };
+
+  const removeSavedFilter = async (filter: SavedFilter) => {
+    await deleteSavedFilter(filter.id);
+    setSavedFilters(await listSavedFilters());
+    setStatus(`បានលុប Filter “${filter.name}”`);
+  };
+
   const importBackup = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -189,6 +219,9 @@ export default function MemoryScreen() {
         {allTags.length ? <View style={styles.tagFilterHeader}><Text style={styles.filterLabel}>FILTER តាម Tags</Text>{selectedTags.length ? <Pressable onPress={clearFilters}><Text style={styles.clearFilters}>សម្អាត</Text></Pressable> : null}</View> : null}
         {allTags.length ? <FlatList horizontal data={allTags} keyExtractor={(item) => item} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagRow} renderItem={({ item }) => <Pressable onPress={() => toggleTagFilter(item)} style={[styles.tagChip, selectedTags.includes(item) && styles.tagChipActive]}><Text style={[styles.tagFilterText, selectedTags.includes(item) && styles.tagFilterTextActive]}>#{item}</Text></Pressable>} /> : null}
         {selectedTags.length ? <View style={styles.activeFilterNote}><MaterialIcons name="filter-list" size={14} color={COLORS.green} /><Text style={styles.activeFilterText}>បង្ហាញ Memory ដែលមានគ្រប់ {selectedTags.length} Tags ដែលបានជ្រើស</Text></View> : null}
+        <View style={styles.savedHeader}><Text style={styles.filterLabel}>SAVED FILTERS</Text><Pressable onPress={() => setShowSaveFilter((current) => !current)}><Text style={styles.saveFilterLink}>{showSaveFilter ? "បិទ" : "+ រក្សាទុក Filter"}</Text></Pressable></View>
+        {showSaveFilter ? <View style={styles.saveFilterCard}><TextInput value={filterName} onChangeText={setFilterName} placeholder="ឈ្មោះ Filter ឧ. Work urgent" placeholderTextColor={COLORS.muted} style={styles.input} /><Pressable onPress={() => void saveCurrentFilter()} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}><MaterialIcons name="bookmark-add" size={17} color={COLORS.bg} /><Text style={styles.primaryButtonText}>រក្សាទុក Filter នេះ</Text></Pressable></View> : null}
+        {savedFilters.length ? <FlatList horizontal data={savedFilters} keyExtractor={(item) => String(item.id)} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedRow} renderItem={({ item }) => <View style={styles.savedChip}><Pressable onPress={() => applySavedFilter(item)}><Text style={styles.savedName} numberOfLines={1}>{item.name}</Text><Text style={styles.savedDetails} numberOfLines={1}>{item.category === "All" ? "All" : item.category}{item.tags.length ? ` · ${item.tags.map((tag) => `#${tag}`).join(" ")}` : ""}</Text></Pressable><Pressable onPress={() => void removeSavedFilter(item)} style={styles.savedDelete}><MaterialIcons name="close" size={13} color={COLORS.red} /></Pressable></View>} /> : null}
         <View style={styles.transferRow}>
           {bulkMode ? <Pressable onPress={() => toggleSelectAll()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="select-all" size={17} color={COLORS.green} /><Text style={styles.transferText}>{selectedIds.length ? "បោះជ្រើស" : "ជ្រើសទាំងអស់"}</Text></Pressable> : <Pressable onPress={() => chooseExportFormat(false)} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export ទាំងអស់</Text></Pressable>}
           <Pressable onPress={() => void importBackup()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="file-upload" size={17} color="#7DB8FF" /><Text style={[styles.transferText, { color: "#7DB8FF" }]}>Import</Text></Pressable>
@@ -256,6 +289,14 @@ const styles = StyleSheet.create({
   tagFilterTextActive: { color: "#E3D7FF" },
   activeFilterNote: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4, marginBottom: 8 },
   activeFilterText: { color: COLORS.muted, fontSize: 10 },
+  savedHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
+  saveFilterLink: { color: COLORS.green, fontSize: 10, fontWeight: "800" },
+  saveFilterCard: { padding: 11, borderRadius: 14, backgroundColor: COLORS.surface2, borderWidth: 1, borderColor: "#355742", marginBottom: 9 },
+  savedRow: { gap: 8, paddingBottom: 11 },
+  savedChip: { minWidth: 125, maxWidth: 190, flexDirection: "row", alignItems: "center", gap: 5, paddingLeft: 10, paddingRight: 6, paddingVertical: 7, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
+  savedName: { color: COLORS.text, fontSize: 10, fontWeight: "800" },
+  savedDetails: { color: COLORS.muted, fontSize: 8, marginTop: 3 },
+  savedDelete: { padding: 4 },
   transferRow: { flexDirection: "row", gap: 9, marginBottom: 14 },
   transferButton: { flex: 1, height: 39, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   transferText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
