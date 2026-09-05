@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -13,6 +13,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { createDraftEntry, filterEntries, type SkillNextEntry } from "@/lib/skillnext-helpers";
+import { createMemory, listMemories } from "@/lib/memory-db";
 
 const COLORS = {
   bg: "#070B10",
@@ -110,6 +111,15 @@ export default function HomeScreen() {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("ស្វាគមន៍មកកាន់ SkillNext");
   const [showComposer, setShowComposer] = useState(false);
+  const [showMemoryComposer, setShowMemoryComposer] = useState(false);
+  const [memoryDraft, setMemoryDraft] = useState("");
+  const [memoryCount, setMemoryCount] = useState(0);
+
+  useEffect(() => {
+    void listMemories().then((memories) => setMemoryCount(memories.length)).catch(() => {
+      setNotice("Memory local កំពុងរង់ចាំ Android SQLite build");
+    });
+  }, []);
 
   const filteredEntries = useMemo(() => filterEntries(entries, query), [entries, query]);
 
@@ -129,6 +139,23 @@ export default function HomeScreen() {
     setEntries((current) => [next, ...current]);
     setShowComposer(false);
     setNotice("បានរក្សាទុកកិច្ចការថ្មី");
+  };
+
+  const saveMemory = async () => {
+    if (!memoryDraft.trim()) {
+      setNotice("សូមសរសេរ Memory មុនពេលរក្សាទុក");
+      return;
+    }
+    try {
+      await createMemory("Memory ថ្មី", memoryDraft);
+      const memories = await listMemories();
+      setMemoryCount(memories.length);
+      setMemoryDraft("");
+      setShowMemoryComposer(false);
+      setNotice("បានរក្សាទុក Memory នៅលើឧបករណ៍នេះ");
+    } catch {
+      setNotice("មិនអាចរក្សាទុក Memory បានទេ សូមសាកល្បងម្តងទៀត");
+    }
   };
 
   const handleEntryPress = (title: string) => setNotice(`កំពុងបើក ${title}`);
@@ -185,10 +212,18 @@ export default function HomeScreen() {
           <View style={styles.localBadge}><View style={styles.localBadgeDot} /><Text style={styles.localBadgeText}>LOCAL</Text></View>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightRow}>
-          <InsightCard icon="psychology" eyebrow="MEMORY" title="បណ្ណាល័យចងចាំ" detail="រក្សាទុក context របស់អ្នកនៅលើឧបករណ៍" accent={COLORS.green} action="បើក Memory" onPress={() => setNotice("កំពុងបើក Memory របស់អ្នក")} />
+          <InsightCard icon="psychology" eyebrow="MEMORY" title={`${memoryCount} Memories`} detail="រក្សាទុក context របស់អ្នកនៅលើឧបករណ៍" accent={COLORS.green} action="បន្ថែម Memory" onPress={() => setShowMemoryComposer(true)} />
           <InsightCard icon="edit-note" eyebrow="DAILY NOTES" title="កំណត់ត្រាថ្ងៃនេះ" detail="កត់ត្រាគំនិត និងកិច្ចការសំខាន់ៗ" accent={COLORS.blue} action="បន្ថែម Note" onPress={() => setNotice("បើកកំណត់ត្រាថ្មីសម្រាប់ថ្ងៃនេះ")} />
           <InsightCard icon="cloud" eyebrow="WEATHER" title="ភ្នំពេញ" detail="អាកាសធាតុ · ពិនិត្យតាមតំបន់របស់អ្នក" accent={COLORS.amber} action="ធ្វើបច្ចុប្បន្នភាព" onPress={() => setNotice("អាកាសធាតុត្រូវបានធ្វើបច្ចុប្បន្នភាព")} />
         </ScrollView>
+
+        {showMemoryComposer && (
+          <View style={styles.composer}>
+            <View style={styles.composerHeader}><Text style={styles.composerTitle}>បន្ថែម Memory</Text><Pressable onPress={() => setShowMemoryComposer(false)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></Pressable></View>
+            <TextInput value={memoryDraft} onChangeText={setMemoryDraft} multiline placeholder="សរសេរ context ឬព័ត៌មានដែលអ្នកចង់ឱ្យ SkillNext ចងចាំ…" placeholderTextColor={COLORS.muted} style={[styles.input, styles.memoryInput]} />
+            <Pressable onPress={() => void saveMemory()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed]}><MaterialIcons name="save" size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>រក្សាទុកក្នុង SQLite</Text></Pressable>
+          </View>
+        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>ចាប់ផ្តើមរហ័ស</Text>
@@ -288,6 +323,7 @@ const styles = StyleSheet.create({
   composerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 11 },
   composerTitle: { color: COLORS.text, fontSize: 15, fontWeight: "800" },
   input: { height: 45, borderRadius: 11, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.bg, color: COLORS.text, paddingHorizontal: 12, fontSize: 12 },
+  memoryInput: { height: 86, paddingTop: 12, textAlignVertical: "top" },
   saveButton: { marginTop: 11, height: 43, borderRadius: 11, backgroundColor: COLORS.green, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
   saveButtonText: { color: COLORS.bg, fontSize: 12, fontWeight: "900" },
   viewAll: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
