@@ -16,6 +16,24 @@ type TelegramResponse = {
   description?: string;
 };
 
+export async function sendTelegramTestMessage(chatId: string, text: string) {
+  const token = await readToken();
+  if (!token) throw new Error("សូមភ្ជាប់ Telegram Bot ជាមុនសិន");
+  const normalizedChatId = chatId.trim();
+  const normalizedText = text.trim();
+  if (!normalizedChatId) throw new Error("សូមបញ្ចូល Chat ID");
+  if (!normalizedText) throw new Error("សូមបញ្ចូលសារដែលត្រូវផ្ញើ");
+  const response = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: normalizedChatId, text: normalizedText }),
+  });
+  const payload = (await response.json()) as TelegramResponse;
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.description || "Telegram មិនអាចផ្ញើសារបានទេ។ ពិនិត្យ Chat ID ហើយចាប់ផ្តើម chat ជាមួយ Bot ជាមុនសិន។");
+  }
+}
+
 async function readToken() {
   if (Platform.OS === "web") return globalThis.localStorage?.getItem(TOKEN_KEY) ?? null;
   return SecureStore.getItemAsync(TOKEN_KEY);
