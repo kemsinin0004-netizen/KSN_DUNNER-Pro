@@ -22,6 +22,14 @@ export async function createMemory(title: string, content: string): Promise<Memo
   return record;
 }
 
+export async function updateMemory(id: number, title: string, content: string) {
+  const record = webMemories.find((memory) => memory.id === id);
+  if (record) {
+    record.title = title.trim();
+    record.content = content.trim();
+  }
+}
+
 export async function deleteMemory(id: number) {
   const index = webMemories.findIndex((memory) => memory.id === id);
   if (index >= 0) webMemories.splice(index, 1);

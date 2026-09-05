@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
 import {
   FlatList,
   Pressable,
@@ -106,6 +107,7 @@ function InsightCard({
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("ទំព័រដើម");
   const [entries, setEntries] = useState(INITIAL_ENTRIES);
   const [query, setQuery] = useState("");
@@ -212,7 +214,7 @@ export default function HomeScreen() {
           <View style={styles.localBadge}><View style={styles.localBadgeDot} /><Text style={styles.localBadgeText}>LOCAL</Text></View>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.insightRow}>
-          <InsightCard icon="psychology" eyebrow="MEMORY" title={`${memoryCount} Memories`} detail="រក្សាទុក context របស់អ្នកនៅលើឧបករណ៍" accent={COLORS.green} action="បន្ថែម Memory" onPress={() => setShowMemoryComposer(true)} />
+          <InsightCard icon="psychology" eyebrow="MEMORY" title={`${memoryCount} Memories`} detail="រក្សាទុក context របស់អ្នកនៅលើឧបករណ៍" accent={COLORS.green} action="មើល Memory" onPress={() => router.push("/memory")} />
           <InsightCard icon="edit-note" eyebrow="DAILY NOTES" title="កំណត់ត្រាថ្ងៃនេះ" detail="កត់ត្រាគំនិត និងកិច្ចការសំខាន់ៗ" accent={COLORS.blue} action="បន្ថែម Note" onPress={() => setNotice("បើកកំណត់ត្រាថ្មីសម្រាប់ថ្ងៃនេះ")} />
           <InsightCard icon="cloud" eyebrow="WEATHER" title="ភ្នំពេញ" detail="អាកាសធាតុ · ពិនិត្យតាមតំបន់របស់អ្នក" accent={COLORS.amber} action="ធ្វើបច្ចុប្បន្នភាព" onPress={() => setNotice("អាកាសធាតុត្រូវបានធ្វើបច្ចុប្បន្នភាព")} />
         </ScrollView>

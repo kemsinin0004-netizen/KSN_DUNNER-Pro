@@ -45,6 +45,16 @@ export async function createMemory(title: string, content: string): Promise<Memo
   return { id: result.lastInsertRowId, title: title.trim(), content: content.trim(), createdAt };
 }
 
+export async function updateMemory(id: number, title: string, content: string) {
+  const database = await getDatabase();
+  await database.runAsync(
+    "UPDATE memories SET title = ?, content = ? WHERE id = ?",
+    title.trim(),
+    content.trim(),
+    id,
+  );
+}
+
 export async function deleteMemory(id: number) {
   const database = await getDatabase();
   await database.runAsync("DELETE FROM memories WHERE id = ?", id);
