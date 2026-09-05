@@ -31,6 +31,8 @@ export default function MemoryScreen() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [status, setStatus] = useState("Memory រក្សាទុកក្នុងឧបករណ៍នេះ");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const loadMemories = useCallback(async () => {
     try {
@@ -80,10 +82,11 @@ export default function MemoryScreen() {
     setStatus("បានលុប Memory រួចរាល់");
   };
 
-  const shareExport = async (format: "json" | "markdown") => {
+  const shareExport = async (format: "json" | "markdown", selectedOnly = false) => {
     try {
       const allMemories = await listMemories();
-      if (!allMemories.length) {
+      const exportMemories = selectedOnly ? allMemories.filter((memory) => selectedIds.includes(memory.id)) : allMemories;
+      if (!exportMemories.length) {
         setStatus("មិនទាន់មាន Memory សម្រាប់ export ទេ");
         return;
       }
@@ -91,11 +94,11 @@ export default function MemoryScreen() {
       const extension = format === "json" ? "json" : "md";
       const mimeType = format === "json" ? "application/json" : "text/markdown";
       const fileUri = `${FileSystem.documentDirectory}skillnext-memory-${Date.now()}.${extension}`;
-      const content = format === "json" ? memoriesToJson(allMemories) : memoriesToMarkdown(allMemories);
+      const content = format === "json" ? memoriesToJson(exportMemories) : memoriesToMarkdown(exportMemories);
       await FileSystem.writeAsStringAsync(fileUri, content, { encoding: FileSystem.EncodingType.UTF8 });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, { mimeType, dialogTitle: `Export ${format.toUpperCase()}` });
-        setStatus(`បាន export ${allMemories.length} Memories ជា ${format.toUpperCase()}`);
+        setStatus(`បាន export ${exportMemories.length} Memories ជា ${format.toUpperCase()}`);
       } else {
         setStatus("Share sheet មិនមានលើឧបករណ៍នេះទេ");
       }
@@ -104,12 +107,27 @@ export default function MemoryScreen() {
     }
   };
 
-  const chooseExportFormat = () => {
-    Alert.alert("Export Memory", "ជ្រើសរើសទម្រង់ឯកសារ", [
-      { text: "JSON", onPress: () => void shareExport("json") },
-      { text: "Markdown", onPress: () => void shareExport("markdown") },
+  const chooseExportFormat = (selectedOnly = false) => {
+    const count = selectedOnly ? selectedIds.length : memories.length;
+    Alert.alert("Export Memory", `${count} Memories · ជ្រើសរើសទម្រង់ឯកសារ`, [
+      { text: "JSON", onPress: () => void shareExport("json", selectedOnly) },
+      { text: "Markdown", onPress: () => void shareExport("markdown", selectedOnly) },
       { text: "បោះបង់", style: "cancel" },
     ]);
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+
+  const toggleSelectAll = () => {
+    const visibleIds = filteredMemories.map((memory) => memory.id);
+    setSelectedIds((current) => visibleIds.every((id) => current.includes(id)) ? current.filter((id) => !visibleIds.includes(id)) : Array.from(new Set([...current, ...visibleIds])));
+  };
+
+  const exitBulkMode = () => {
+    setBulkMode(false);
+    setSelectedIds([]);
   };
 
   const importBackup = async () => {
@@ -145,9 +163,11 @@ export default function MemoryScreen() {
         <View style={styles.status}><View style={styles.statusDot} /><Text style={styles.statusText}>{status}</Text></View>
         <View style={styles.searchBox}><MaterialIcons name="search" size={19} color={COLORS.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="ស្វែងរក Memory…" placeholderTextColor={COLORS.muted} style={styles.searchInput} /></View>
         <View style={styles.transferRow}>
-          <Pressable onPress={chooseExportFormat} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export</Text></Pressable>
+          {bulkMode ? <Pressable onPress={() => toggleSelectAll()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="select-all" size={17} color={COLORS.green} /><Text style={styles.transferText}>{selectedIds.length ? "បោះជ្រើស" : "ជ្រើសទាំងអស់"}</Text></Pressable> : <Pressable onPress={() => chooseExportFormat(false)} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export ទាំងអស់</Text></Pressable>}
           <Pressable onPress={() => void importBackup()} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="file-upload" size={17} color="#7DB8FF" /><Text style={[styles.transferText, { color: "#7DB8FF" }]}>Import</Text></Pressable>
+          {!bulkMode ? <Pressable onPress={() => setBulkMode(true)} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="checklist" size={17} color="#D4A7FF" /><Text style={[styles.transferText, { color: "#D4A7FF" }]}>ជ្រើស</Text></Pressable> : <Pressable onPress={() => chooseExportFormat(true)} style={({ pressed }) => [styles.transferButton, pressed && styles.pressed]}><MaterialIcons name="ios-share" size={17} color={COLORS.green} /><Text style={styles.transferText}>Export {selectedIds.length}</Text></Pressable>}
         </View>
+        {bulkMode ? <View style={styles.bulkBar}><Text style={styles.bulkText}>បានជ្រើស {selectedIds.length} / {memories.length}</Text><Pressable onPress={exitBulkMode}><Text style={styles.cancelBulk}>បិទការជ្រើស</Text></Pressable></View> : null}
 
         {editing ? (
           <View style={styles.editorCard}>
@@ -165,6 +185,7 @@ export default function MemoryScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View style={styles.memoryCard}>
+              {bulkMode ? <Pressable onPress={() => toggleSelected(item.id)} style={[styles.checkbox, selectedIds.includes(item.id) && styles.checkboxSelected]}>{selectedIds.includes(item.id) ? <MaterialIcons name="check" size={15} color={COLORS.bg} /> : null}</Pressable> : null}
               <View style={styles.memoryIcon}><MaterialIcons name="sticky-note-2" size={20} color={COLORS.green} /></View>
               <View style={styles.memoryBody}><Text style={styles.memoryTitle} numberOfLines={1}>{item.title}</Text><Text style={styles.memoryContent} numberOfLines={3}>{item.content}</Text><Text style={styles.memoryDate}>{new Date(item.createdAt).toLocaleDateString("km-KH")}</Text></View>
               <View style={styles.cardActions}><Pressable onPress={() => beginEdit(item)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><MaterialIcons name="edit" size={18} color={COLORS.green} /></Pressable><Pressable onPress={() => confirmDelete(item)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><MaterialIcons name="delete-outline" size={19} color={COLORS.red} /></Pressable></View>
@@ -194,9 +215,14 @@ const styles = StyleSheet.create({
   transferRow: { flexDirection: "row", gap: 9, marginBottom: 14 },
   transferButton: { flex: 1, height: 39, borderRadius: 11, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   transferText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
+  bulkBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 4, marginTop: -5, marginBottom: 10 },
+  bulkText: { color: COLORS.muted, fontSize: 10 },
+  cancelBulk: { color: COLORS.red, fontSize: 10, fontWeight: "800" },
   listContent: { paddingBottom: 32, flexGrow: 1 },
   memoryCard: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 13, borderRadius: 16, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, marginBottom: 9 },
   memoryIcon: { width: 39, height: 39, borderRadius: 12, backgroundColor: COLORS.greenDark, alignItems: "center", justifyContent: "center" },
+  checkbox: { width: 23, height: 23, borderRadius: 7, borderWidth: 1, borderColor: COLORS.line, alignItems: "center", justifyContent: "center", marginTop: 8 },
+  checkboxSelected: { backgroundColor: COLORS.green, borderColor: COLORS.green },
   memoryBody: { flex: 1, minWidth: 0 },
   memoryTitle: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
   memoryContent: { color: COLORS.muted, fontSize: 11, lineHeight: 17, marginTop: 5 },
