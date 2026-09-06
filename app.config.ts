@@ -36,6 +36,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-background-task",
+    ["expo-notifications", { defaultChannel: "telegram", color: "#4ADE80" }],
     ["expo-splash-screen", { image: "./assets/images/splash-icon.png", imageWidth: 200, resizeMode: "contain", backgroundColor: "#070B10" }],
     ["expo-build-properties", { android: { buildArchs: ["armeabi-v7a", "arm64-v8a"], minSdkVersion: 24 } }],
   ],
