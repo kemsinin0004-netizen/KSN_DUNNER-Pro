@@ -19,7 +19,7 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
-import "@/lib/telegram-background";
+import { TELEGRAM_ARCHIVE_ACTION, TELEGRAM_MARK_READ_ACTION, archiveTelegramMessage, markTelegramMessageRead } from "@/lib/telegram-background";
 import { sendTelegramTestMessage } from "@/lib/telegram-bot";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -43,8 +43,17 @@ export default function RootLayout() {
 
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      if (response.actionIdentifier !== "telegram-reply-action") return;
+      if (!["telegram-reply-action", TELEGRAM_MARK_READ_ACTION, TELEGRAM_ARCHIVE_ACTION].includes(response.actionIdentifier)) return;
       const data = response.notification.request.content.data;
+      const updateId = typeof data.updateId === "number" || typeof data.updateId === "string" ? Number(data.updateId) : NaN;
+      if (response.actionIdentifier === TELEGRAM_MARK_READ_ACTION && Number.isFinite(updateId)) {
+        void markTelegramMessageRead(updateId);
+        return;
+      }
+      if (response.actionIdentifier === TELEGRAM_ARCHIVE_ACTION && Number.isFinite(updateId)) {
+        void archiveTelegramMessage(updateId);
+        return;
+      }
       const chatId = typeof data.chatId === "string" || typeof data.chatId === "number" ? String(data.chatId) : "";
       const reply = response.userText?.trim() || "";
       if (!chatId || !reply) return;

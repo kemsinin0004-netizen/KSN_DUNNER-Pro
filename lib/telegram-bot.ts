@@ -23,6 +23,8 @@ export type TelegramReceivedMessage = {
   senderName: string;
   text: string;
   receivedAt: string;
+  readAt?: string;
+  archivedAt?: string;
 };
 
 type TelegramUpdatesResponse = TelegramResponse & {

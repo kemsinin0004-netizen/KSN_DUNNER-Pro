@@ -8,6 +8,8 @@ import { receiveTelegramMessages, type TelegramReceivedMessage } from "@/lib/tel
 
 export const TELEGRAM_BACKGROUND_TASK = "skillnext-telegram-receive";
 export const TELEGRAM_REPLY_CATEGORY = "skillnext-telegram-reply";
+export const TELEGRAM_MARK_READ_ACTION = "telegram-mark-read";
+export const TELEGRAM_ARCHIVE_ACTION = "telegram-archive";
 const OFFSET_KEY = "skillnext.telegram.update_offset";
 const MESSAGES_KEY = "skillnext.telegram.received_messages";
 
@@ -16,6 +18,14 @@ if (Platform.OS !== "web") {
     identifier: "telegram-reply-action",
     buttonTitle: "តបសារ",
     textInput: { submitButtonTitle: "ផ្ញើ", placeholder: "សរសេរចម្លើយ…" },
+    options: { opensAppToForeground: true },
+  }, {
+    identifier: TELEGRAM_MARK_READ_ACTION,
+    buttonTitle: "អានរួច",
+    options: { opensAppToForeground: true },
+  }, {
+    identifier: TELEGRAM_ARCHIVE_ACTION,
+    buttonTitle: "Archive",
     options: { opensAppToForeground: true },
   }]);
 }
@@ -63,6 +73,20 @@ TaskManager.defineTask(TELEGRAM_BACKGROUND_TASK, async () => {
 export async function getBackgroundTelegramMessages() {
   const raw = await AsyncStorage.getItem(MESSAGES_KEY);
   return raw ? (JSON.parse(raw) as TelegramReceivedMessage[]) : [];
+}
+
+async function updateMessageState(updateId: number, field: "readAt" | "archivedAt") {
+  const messages = await getBackgroundTelegramMessages();
+  const updated = messages.map((message) => message.updateId === updateId ? { ...message, [field]: new Date().toISOString() } : message);
+  await AsyncStorage.setItem(MESSAGES_KEY, JSON.stringify(updated));
+}
+
+export async function markTelegramMessageRead(updateId: number) {
+  await updateMessageState(updateId, "readAt");
+}
+
+export async function archiveTelegramMessage(updateId: number) {
+  await updateMessageState(updateId, "archivedAt");
 }
 
 export async function registerTelegramBackgroundTask() {
