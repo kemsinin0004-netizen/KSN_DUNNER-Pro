@@ -15,7 +15,7 @@ import { StatusBar } from "expo-status-bar";
 import { ScreenContainer } from "@/components/screen-container";
 import { createDraftEntry, filterEntries, type SkillNextEntry } from "@/lib/skillnext-helpers";
 import { clearTelegramBot, connectTelegramBot, getSavedTelegramBot, receiveTelegramMessages, sendTelegramTestMessage, telegramBotLabel, type TelegramBotProfile, type TelegramReceivedMessage } from "@/lib/telegram-bot";
-import { isTelegramBackgroundTaskRegistered, registerTelegramBackgroundTask, unregisterTelegramBackgroundTask } from "@/lib/telegram-background";
+import { getBackgroundTelegramMessages, isTelegramBackgroundTaskRegistered, registerTelegramBackgroundTask, unregisterTelegramBackgroundTask } from "@/lib/telegram-background";
 
 const COLORS = {
   bg: "#070B10",
@@ -77,6 +77,12 @@ function EntryCard({ item, onPress }: { item: Entry; onPress: () => void }) {
   );
 }
 
+function getMessageStatus(message: TelegramReceivedMessage) {
+  if (message.archivedAt) return { label: "Archived", color: COLORS.amber, icon: "archive" as const };
+  if (message.readAt) return { label: "Read", color: COLORS.blue, icon: "done" as const };
+  return { label: "មិនទាន់អាន", color: COLORS.green, icon: "fiber-new" as const };
+}
+
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState("ទំព័រដើម");
   const [entries, setEntries] = useState(INITIAL_ENTRIES);
@@ -97,6 +103,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     void getSavedTelegramBot().then(setBotProfile);
+    void getBackgroundTelegramMessages().then(setReceivedMessages).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -118,6 +125,14 @@ export default function HomeScreen() {
         const result = await receiveTelegramMessages(updateOffset.current);
         if (result.nextOffset !== undefined) updateOffset.current = result.nextOffset;
         if (result.messages.length) setReceivedMessages((current) => [...result.messages, ...current].slice(0, 30));
+        const storedMessages = await getBackgroundTelegramMessages();
+        if (storedMessages.length) {
+          setReceivedMessages((current) => {
+            const merged = new Map(storedMessages.map((message) => [message.updateId, message]));
+            current.forEach((message) => merged.set(message.updateId, { ...merged.get(message.updateId), ...message }));
+            return Array.from(merged.values()).slice(0, 30);
+          });
+        }
       } catch (error) {
         if (active) setNotice(error instanceof Error ? error.message : "មិនអាចទទួលសារ Telegram បានទេ");
       } finally {
@@ -279,7 +294,7 @@ export default function HomeScreen() {
         {botProfile && (
           <View style={styles.inboxCard}>
             <View style={styles.inboxHeader}><View><Text style={styles.composerTitle}>សារចូលពី Telegram</Text><Text style={styles.botHint}>{receivingMessages ? "កំពុងពិនិត្យសារថ្មី…" : `${receivedMessages.length} សារត្រូវបានទទួល`}</Text></View><MaterialIcons name={receivingMessages ? "sync" : "mark-chat-read"} size={19} color={COLORS.green} /></View>
-            {receivedMessages.length ? receivedMessages.slice(0, 5).map((message) => <View key={message.updateId} style={styles.messageCard}><View style={styles.messageHeader}><Text style={styles.messageSender}>{message.senderName}</Text><Text style={styles.messageChat}>{message.chatTitle}</Text></View><Text style={styles.messageText}>{message.text}</Text><Text style={styles.messageTime}>{new Date(message.receivedAt).toLocaleTimeString("km-KH", { hour: "2-digit", minute: "2-digit" })}</Text></View>) : <Text style={styles.emptyMessages}>ផ្ញើសារទៅកាន់ Bot របស់អ្នក ដើម្បីឲ្យវាបង្ហាញនៅទីនេះ</Text>}
+            {receivedMessages.length ? receivedMessages.slice(0, 5).map((message) => <View key={message.updateId} style={styles.messageCard}><View style={styles.messageHeader}><Text style={styles.messageSender}>{message.senderName}</Text><Text style={styles.messageChat}>{message.chatTitle}</Text></View><View style={styles.messageStatus}><MaterialIcons name={getMessageStatus(message).icon} size={12} color={getMessageStatus(message).color} /><Text style={[styles.messageStatusText, { color: getMessageStatus(message).color }]}>{getMessageStatus(message).label}</Text></View><Text style={styles.messageText}>{message.text}</Text><Text style={styles.messageTime}>{new Date(message.receivedAt).toLocaleTimeString("km-KH", { hour: "2-digit", minute: "2-digit" })}</Text></View>) : <Text style={styles.emptyMessages}>ផ្ញើសារទៅកាន់ Bot របស់អ្នក ដើម្បីឲ្យវាបង្ហាញនៅទីនេះ</Text>}
           </View>
         )}
 
@@ -355,6 +370,8 @@ const styles = StyleSheet.create({
   inboxHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 11 },
   messageCard: { padding: 10, borderRadius: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, marginBottom: 7 },
   messageHeader: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  messageStatus: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", marginTop: 6 },
+  messageStatusText: { fontSize: 9, fontWeight: "800" },
   messageSender: { color: COLORS.green, fontSize: 10, fontWeight: "800" },
   messageChat: { color: COLORS.muted, fontSize: 9, flexShrink: 1 },
   messageText: { color: COLORS.text, fontSize: 12, lineHeight: 18, marginTop: 5 },
