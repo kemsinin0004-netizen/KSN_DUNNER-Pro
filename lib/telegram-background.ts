@@ -13,8 +13,22 @@ export const TELEGRAM_ARCHIVE_ACTION = "telegram-archive";
 const OFFSET_KEY = "skillnext.telegram.update_offset";
 const MESSAGES_KEY = "skillnext.telegram.received_messages";
 
-if (Platform.OS !== "web") {
-  void Notifications.setNotificationCategoryAsync(TELEGRAM_REPLY_CATEGORY, [{
+let notificationsConfigured = false;
+
+/** Configure native notification behavior after the React runtime is mounted. */
+export async function configureTelegramNotifications() {
+  if (notificationsConfigured || Platform.OS === "web") return;
+  notificationsConfigured = true;
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: false,
+      shouldSetBadge: true,
+    }),
+  });
+  await Notifications.setNotificationCategoryAsync(TELEGRAM_REPLY_CATEGORY, [{
     identifier: "telegram-reply-action",
     buttonTitle: "តបសារ",
     textInput: { submitButtonTitle: "ផ្ញើ", placeholder: "សរសេរចម្លើយ…" },
@@ -29,16 +43,6 @@ if (Platform.OS !== "web") {
     options: { opensAppToForeground: true },
   }]);
 }
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: true,
-  }),
-});
 
 TaskManager.defineTask(TELEGRAM_BACKGROUND_TASK, async () => {
   try {
