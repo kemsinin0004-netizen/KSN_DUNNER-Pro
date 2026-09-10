@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
-import { Platform } from "react-native";
+import { Platform, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import * as Notifications from "expo-notifications";
 import "@/lib/_core/nativewind-pressable";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -21,9 +21,21 @@ import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { TELEGRAM_ARCHIVE_ACTION, TELEGRAM_MARK_READ_ACTION, archiveTelegramMessage, configureTelegramNotifications, markTelegramMessageRead } from "@/lib/telegram-background";
 import { sendTelegramTestMessage } from "@/lib/telegram-bot";
+import { formatCrashLogs, installCrashHandlers, readCrashLogs, type CrashLog } from "@/lib/crash-logger";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
+
+function CrashFallback({ error, onShare }: { error: CrashLog | null; onShare: () => void }) {
+  return (
+    <View style={styles.crashScreen}>
+      <Text style={styles.crashTitle}>កម្មវិធីមានបញ្ហា</Text>
+      <Text style={styles.crashText}>SkillNext បានរក្សាទុកព័ត៌មាន error ដើម្បីជួយពិនិត្យមូលហេតុ។ សូមចែករំលែក logs ទៅអ្នកអភិវឌ្ឍន៍។</Text>
+      {error ? <Text style={styles.crashError} selectable>{error.message}</Text> : null}
+      <Pressable onPress={onShare} style={styles.crashButton}><Text style={styles.crashButtonText}>ចែករំលែក Crash Logs</Text></Pressable>
+    </View>
+  );
+}
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -35,10 +47,22 @@ export default function RootLayout() {
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
+  const [fatalError, setFatalError] = useState<CrashLog | null>(null);
 
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void readCrashLogs().then((logs) => {
+      if (active && logs[0]?.kind === "fatal") setFatalError(logs[0]);
+    });
+    const uninstall = installCrashHandlers((entry) => {
+      if (entry.kind === "fatal" && active) setFatalError(entry);
+    });
+    return () => { active = false; uninstall(); };
   }, []);
 
   useEffect(() => {
@@ -127,6 +151,12 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 
+  if (fatalError) {
+    return <CrashFallback error={fatalError} onShare={() => {
+      void readCrashLogs().then((logs) => Share.share({ title: "SkillNext crash logs", message: formatCrashLogs(logs) }));
+    }} />;
+  }
+
   const shouldOverrideSafeArea = Platform.OS === "web";
 
   if (shouldOverrideSafeArea) {
@@ -149,3 +179,12 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  crashScreen: { flex: 1, backgroundColor: "#070B10", justifyContent: "center", padding: 24 },
+  crashTitle: { color: "#F5F7FA", fontSize: 26, fontWeight: "800", marginBottom: 12 },
+  crashText: { color: "#B7C2CF", fontSize: 16, lineHeight: 24, marginBottom: 18 },
+  crashError: { color: "#FF7474", backgroundColor: "#21161A", borderColor: "#7F2D35", borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 18 },
+  crashButton: { alignSelf: "flex-start", backgroundColor: "#4ADE80", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13 },
+  crashButtonText: { color: "#07130B", fontWeight: "800" },
+});
