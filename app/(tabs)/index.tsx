@@ -197,6 +197,12 @@ export default function HomeScreen() {
     setBotLoading(true);
     try {
       const profile = await connectTelegramBot(botToken);
+      // Remove the sensitive token from the system clipboard after successful verification.
+      try {
+        await Clipboard.setStringAsync("");
+      } catch {
+        // Clipboard cleanup is best-effort and must not undo a successful connection.
+      }
       setBotProfile(profile);
       setReceivedMessages([]);
       setBotToken("");
