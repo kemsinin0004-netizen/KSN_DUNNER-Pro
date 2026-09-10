@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as Clipboard from "expo-clipboard";
 import { StatusBar } from "expo-status-bar";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -55,6 +56,10 @@ function ActionButton({ icon, label, color, onPress }: { icon: keyof typeof Mate
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
   );
+}
+
+function ClipboardButton({ icon, label, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; onPress: () => void }) {
+  return <Pressable onPress={onPress} style={({ pressed }) => [styles.clipboardButton, pressed && styles.pressed]}><MaterialIcons name={icon} size={15} color={COLORS.green} /><Text style={styles.clipboardButtonText}>{label}</Text></Pressable>;
 }
 
 function EntryCard({ item, onPress }: { item: Entry; onPress: () => void }) {
@@ -238,6 +243,32 @@ export default function HomeScreen() {
     }
   };
 
+  const pasteToken = async () => {
+    const value = (await Clipboard.getStringAsync()).trim();
+    if (!value) { setNotice("Clipboard មិនមាន Token ទេ"); return; }
+    setBotToken(value);
+    setNotice("បាន Paste Bot Token ពី Clipboard");
+  };
+
+  const copyToken = async () => {
+    if (!botToken.trim()) { setNotice("សូមបញ្ចូល Bot Token មុនពេល Copy"); return; }
+    await Clipboard.setStringAsync(botToken.trim());
+    setNotice("បាន Copy Bot Token ទៅ Clipboard");
+  };
+
+  const pasteChatId = async () => {
+    const value = (await Clipboard.getStringAsync()).trim();
+    if (!value) { setNotice("Clipboard មិនមាន Chat ID ទេ"); return; }
+    setChatId(value);
+    setNotice("បាន Paste Chat ID ពី Clipboard");
+  };
+
+  const copyChatId = async () => {
+    if (!chatId.trim()) { setNotice("សូមបញ្ចូល Chat ID មុនពេល Copy"); return; }
+    await Clipboard.setStringAsync(chatId.trim());
+    setNotice("បាន Copy Chat ID ទៅ Clipboard");
+  };
+
   const createEntry = () => {
     const next = createDraftEntry();
     setEntries((current) => [next, ...current]);
@@ -314,9 +345,9 @@ export default function HomeScreen() {
           <View style={styles.botCard}>
             <View style={styles.composerHeader}><View><Text style={styles.composerTitle}>Telegram Bot</Text><Text style={styles.botHint}>ភ្ជាប់ Bot ដើម្បីទទួល និងគ្រប់គ្រងសារ</Text></View><Pressable onPress={() => setShowBotConnector(false)}><MaterialIcons name="close" size={20} color={COLORS.muted} /></Pressable></View>
             {botProfile ? (
-              <><View style={styles.botConnected}><MaterialIcons name="check-circle" size={20} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.botConnectedTitle}>{telegramBotLabel(botProfile)}</Text><Text style={styles.botHint}>Telegram Bot បានផ្ទៀងផ្ទាត់ជោគជ័យ</Text></View><Pressable onPress={() => void disconnectBot()} style={styles.disconnectButton}><Text style={styles.disconnectText}>ផ្តាច់</Text></Pressable></View><TextInput value={chatId} onChangeText={setChatId} keyboardType="default" placeholder="Chat ID ឧ. 123456789" placeholderTextColor={COLORS.muted} style={[styles.input, styles.botInput]} /><TextInput value={testMessage} onChangeText={setTestMessage} placeholder="សារសាកល្បង" placeholderTextColor={COLORS.muted} style={[styles.input, styles.botInput]} /><Pressable disabled={sendingMessage} onPress={() => void sendTestMessage()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, sendingMessage && styles.disabledButton]}><MaterialIcons name={sendingMessage ? "sync" : "send"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{sendingMessage ? "កំពុងផ្ញើ…" : "ផ្ញើ Test Message"}</Text></Pressable>{Platform.OS !== "web" ? <Pressable onPress={() => void toggleBackgroundReceiving()} style={styles.backgroundToggle}><MaterialIcons name={backgroundEnabled ? "notifications-active" : "notifications-none"} size={18} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.backgroundTitle}>{backgroundEnabled ? "ទទួលសារនៅផ្ទៃខាងក្រោយ: បើក" : "បើកទទួលសារនៅផ្ទៃខាងក្រោយ"}</Text><Text style={styles.botHint}>Android ពិនិត្យតាមពេលវេលាដែលប្រព័ន្ធកំណត់ (យ៉ាងហោចណាស់ 15 នាទី)</Text></View><MaterialIcons name="chevron-right" size={18} color={COLORS.muted} /></Pressable> : null}</>
+              <><View style={styles.botConnected}><MaterialIcons name="check-circle" size={20} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.botConnectedTitle}>{telegramBotLabel(botProfile)}</Text><Text style={styles.botHint}>Telegram Bot បានផ្ទៀងផ្ទាត់ជោគជ័យ</Text></View><Pressable onPress={() => void disconnectBot()} style={styles.disconnectButton}><Text style={styles.disconnectText}>ផ្តាច់</Text></Pressable></View><View style={styles.clipboardRow}><TextInput value={chatId} onChangeText={setChatId} keyboardType="default" placeholder="Chat ID ឧ. 123456789" placeholderTextColor={COLORS.muted} style={[styles.input, styles.clipboardInput]} /><ClipboardButton icon="content-paste" label="Paste" onPress={() => void pasteChatId()} /><ClipboardButton icon="content-copy" label="Copy" onPress={() => void copyChatId()} /></View><TextInput value={testMessage} onChangeText={setTestMessage} placeholder="សារសាកល្បង" placeholderTextColor={COLORS.muted} style={[styles.input, styles.botInput]} /><Pressable disabled={sendingMessage} onPress={() => void sendTestMessage()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, sendingMessage && styles.disabledButton]}><MaterialIcons name={sendingMessage ? "sync" : "send"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{sendingMessage ? "កំពុងផ្ញើ…" : "ផ្ញើ Test Message"}</Text></Pressable>{Platform.OS !== "web" ? <Pressable onPress={() => void toggleBackgroundReceiving()} style={styles.backgroundToggle}><MaterialIcons name={backgroundEnabled ? "notifications-active" : "notifications-none"} size={18} color={COLORS.green} /><View style={{ flex: 1 }}><Text style={styles.backgroundTitle}>{backgroundEnabled ? "ទទួលសារនៅផ្ទៃខាងក្រោយ: បើក" : "បើកទទួលសារនៅផ្ទៃខាងក្រោយ"}</Text><Text style={styles.botHint}>Android ពិនិត្យតាមពេលវេលាដែលប្រព័ន្ធកំណត់ (យ៉ាងហោចណាស់ 15 នាទី)</Text></View><MaterialIcons name="chevron-right" size={18} color={COLORS.muted} /></Pressable> : null}</>
             ) : (
-              <><TextInput value={botToken} onChangeText={setBotToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="123456789:AA... Bot Token" placeholderTextColor={COLORS.muted} style={styles.input} /><Text style={styles.botHint}>រក Token នៅក្នុង Telegram: @BotFather → /newbot</Text><Pressable disabled={botLoading} onPress={() => void connectBot()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, botLoading && styles.disabledButton]}><MaterialIcons name={botLoading ? "sync" : "link"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{botLoading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ភ្ជាប់ និងផ្ទៀងផ្ទាត់"}</Text></Pressable></>
+              <><View style={styles.clipboardRow}><TextInput value={botToken} onChangeText={setBotToken} autoCapitalize="none" autoCorrect={false} secureTextEntry placeholder="123456789:AA... Bot Token" placeholderTextColor={COLORS.muted} style={[styles.input, styles.clipboardInput]} /><ClipboardButton icon="content-paste" label="Paste" onPress={() => void pasteToken()} /><ClipboardButton icon="content-copy" label="Copy" onPress={() => void copyToken()} /></View><Text style={styles.botHint}>រក Token នៅក្នុង Telegram: @BotFather → /newbot</Text><Pressable disabled={botLoading} onPress={() => void connectBot()} style={({ pressed }) => [styles.saveButton, pressed && styles.heroButtonPressed, botLoading && styles.disabledButton]}><MaterialIcons name={botLoading ? "sync" : "link"} size={18} color={COLORS.bg} /><Text style={styles.saveButtonText}>{botLoading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ភ្ជាប់ និងផ្ទៀងផ្ទាត់"}</Text></Pressable></>
             )}
           </View>
         )}
@@ -415,6 +446,10 @@ const styles = StyleSheet.create({
   botConnected: { flexDirection: "row", alignItems: "center", gap: 9, padding: 10, borderRadius: 12, backgroundColor: COLORS.surface },
   botConnectedTitle: { color: COLORS.text, fontSize: 13, fontWeight: "800" },
   botInput: { marginTop: 9 },
+  clipboardRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 9 },
+  clipboardInput: { flex: 1, marginTop: 0, minWidth: 0 },
+  clipboardButton: { height: 36, paddingHorizontal: 7, borderRadius: 9, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line, alignItems: "center", justifyContent: "center", gap: 2 },
+  clipboardButtonText: { color: COLORS.green, fontSize: 8, fontWeight: "800" },
   backgroundToggle: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 11, padding: 10, borderRadius: 12, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.line },
   backgroundTitle: { color: COLORS.text, fontSize: 10, fontWeight: "800" },
   disconnectButton: { borderWidth: 1, borderColor: "#733A42", borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 },
