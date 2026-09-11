@@ -23,6 +23,7 @@ export function PhoneLoginPanel() {
   const [challengeId, setChallengeId] = useState("");
   const [step, setStep] = useState<LoginStep>("phone");
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
   const loadingRotation = useRef(new Animated.Value(0)).current;
   const codeInputRef = useRef<TextInput>(null);
@@ -47,6 +48,12 @@ export function PhoneLoginPanel() {
     return undefined;
   }, [step]);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = setInterval(() => setResendCooldown((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   const friendlyError = (status: number, fallback: string) => {
     if (status === 401) return "កូដ OTP មិនត្រឹមត្រូវទេ។ សូមពិនិត្យសារ SMS ហើយបញ្ចូលម្ដងទៀត។";
     if (status === 410) return "កូដ OTP បានផុតកំណត់។ សូមស្នើកូដថ្មី។";
@@ -68,6 +75,8 @@ export function PhoneLoginPanel() {
       if (!response.ok || !payload.ok || !payload.challengeId) throw new Error(friendlyError(response.status, payload.error || "មិនអាចផ្ញើ SMS បានទេ"));
       setChallengeId(payload.challengeId);
       setStep("code");
+      setCode("");
+      setResendCooldown(60);
       setNotice("បានផ្ញើ Verify Code ទៅលេខទូរសព្ទ៍របស់អ្នក។ Code មានសុពលភាព 5 នាទី។");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "មិនអាចផ្ញើ SMS បានទេ");
@@ -115,6 +124,12 @@ export function PhoneLoginPanel() {
     }
   };
 
+  const resendCode = async () => {
+    if (resendCooldown > 0 || loading) return;
+    setErrorMessage("");
+    await requestCode();
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -133,6 +148,7 @@ export function PhoneLoginPanel() {
         <TextInput ref={codeInputRef} value={code} onChangeText={(value) => { setCode(value.replace(/\D/g, "").slice(0, 6)); setErrorMessage(""); }} keyboardType="number-pad" autoFocus maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
         <Pressable onPress={() => void pasteOtp()} style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}><MaterialIcons name="content-paste" size={16} color={COLORS.blue} /><Text style={styles.pasteText}>Paste OTP ពី Clipboard</Text></Pressable>
         <Pressable disabled={loading} onPress={() => void verifyCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "verified-user"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ផ្ទៀងផ្ទាត់ Code"}</Text></Pressable>
+        <Pressable disabled={loading || resendCooldown > 0} onPress={() => void resendCode()} style={({ pressed }) => [styles.resendButton, pressed && styles.pressed, (loading || resendCooldown > 0) && styles.disabled]}><MaterialIcons name="refresh" size={16} color={resendCooldown > 0 ? COLORS.muted : COLORS.green} /><Text style={[styles.resendText, resendCooldown > 0 && styles.resendDisabledText]}>{resendCooldown > 0 ? `ផ្ញើ Code ម្តងទៀតក្នុង ${resendCooldown} វិនាទី` : "ផ្ញើ Code ម្តងទៀត"}</Text></Pressable>
         <Pressable onPress={() => setStep("phone")} style={styles.secondaryButton}><Text style={styles.secondaryText}>ប្តូរលេខទូរសព្ទ៍</Text></Pressable>
       </> : <>
         <View style={styles.success}><MaterialIcons name="check-circle" size={22} color={COLORS.green} /><Text style={styles.successText}>លេខទូរសព្ទ៍ Verify ជោគជ័យ</Text></View>
@@ -161,6 +177,9 @@ const styles = StyleSheet.create({
   secondaryText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
   pasteButton: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10 },
   pasteText: { color: COLORS.blue, fontSize: 11, fontWeight: "800" },
+  resendButton: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 9 },
+  resendText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
+  resendDisabledText: { color: COLORS.muted },
   success: { flexDirection: "row", alignItems: "center", gap: 8, padding: 13, borderRadius: 11, backgroundColor: "#123A26" },
   successText: { color: COLORS.green, fontSize: 12, fontWeight: "800" },
   pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
