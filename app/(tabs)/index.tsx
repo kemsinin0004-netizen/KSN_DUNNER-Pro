@@ -16,6 +16,7 @@ import * as Clipboard from "expo-clipboard";
 import { StatusBar } from "expo-status-bar";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { PhoneLoginPanel } from "@/components/phone-login-panel";
 import { createDraftEntry, filterEntries, type SkillNextEntry } from "@/lib/skillnext-helpers";
 import { clearTelegramBot, connectTelegramBot, getSavedTelegramBot, receiveTelegramMessages, sendTelegramTestMessage, telegramBotLabel, type TelegramBotProfile, type TelegramReceivedMessage } from "@/lib/telegram-bot";
 import { getBackgroundTelegramMessages, isTelegramBackgroundTaskRegistered, registerTelegramBackgroundTask, unregisterTelegramBackgroundTask } from "@/lib/telegram-background";
@@ -330,6 +331,8 @@ export default function HomeScreen() {
         </View>
 
         {notice ? <View style={styles.notice}><MaterialIcons name="info-outline" size={16} color={COLORS.green} /><Text style={styles.noticeText}>{notice}</Text></View> : null}
+
+        {activeTab === "គណនី" ? <PhoneLoginPanel /> : null}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>ចាប់ផ្តើមរហ័ស</Text>
