@@ -27,6 +27,7 @@ export function PhoneLoginPanel() {
   const [errorMessage, setErrorMessage] = useState("");
   const loadingRotation = useRef(new Animated.Value(0)).current;
   const codeInputRef = useRef<TextInput>(null);
+  const verifyingRef = useRef(false);
   const [notice, setNotice] = useState("AWS SNS OTP · បញ្ចូលលេខទូរសព្ទ៍ដើម្បីទទួល SMS");
 
   useEffect(() => {
@@ -85,15 +86,18 @@ export function PhoneLoginPanel() {
     }
   };
 
-  const verifyCode = async () => {
-    if (!/^\d{6}$/.test(code.trim())) {
+  const verifyCode = async (codeOverride?: string) => {
+    const submittedCode = (codeOverride ?? code).trim();
+    if (!/^\d{6}$/.test(submittedCode)) {
       setErrorMessage("សូមបញ្ចូល Verify Code ចំនួន ៦ ខ្ទង់។");
       return;
     }
+    if (verifyingRef.current) return;
+    verifyingRef.current = true;
     setErrorMessage("");
     setLoading(true);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/auth/phone/verify-code`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeId, code: code.trim() }) });
+      const response = await fetch(`${getApiBaseUrl()}/api/auth/phone/verify-code`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeId, code: submittedCode }) });
       const payload = await response.json() as { ok?: boolean; verified?: boolean; sessionToken?: string; user?: { openId: string; name: string; loginMethod: string }; error?: string };
       if (!response.ok || !payload.ok || !payload.verified) throw new Error(friendlyError(response.status, payload.error || "Verify Code មិនត្រឹមត្រូវទេ"));
       if (payload.sessionToken) await setSessionToken(payload.sessionToken);
@@ -104,6 +108,7 @@ export function PhoneLoginPanel() {
       setErrorMessage(error instanceof Error ? error.message : "Verify Code មិនបានសម្រេចទេ");
     } finally {
       setLoading(false);
+      verifyingRef.current = false;
     }
   };
 
@@ -117,8 +122,9 @@ export function PhoneLoginPanel() {
       }
       setCode(pastedCode);
       setErrorMessage("");
-      setNotice("បានបំពេញ OTP ពី Clipboard រួចរាល់។ សូមចុចផ្ទៀងផ្ទាត់ Code។");
+      setNotice("បានបំពេញ OTP ៦ ខ្ទង់។ កំពុងផ្ទៀងផ្ទាត់ដោយស្វ័យប្រវត្តិ…");
       codeInputRef.current?.focus();
+      void verifyCode(pastedCode);
     } catch {
       setErrorMessage("មិនអាចអាន Clipboard បានទេ។ សូមបញ្ចូល OTP ដោយដៃ។");
     }
@@ -145,7 +151,7 @@ export function PhoneLoginPanel() {
         <Pressable disabled={loading} onPress={() => void requestCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "sms"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ញើ SMS…" : "ស្នើ Verify Code"}</Text></Pressable>
       </> : step === "code" ? <>
         <Text style={styles.label}>Verify Code សម្រាប់ {phone}</Text>
-        <TextInput ref={codeInputRef} value={code} onChangeText={(value) => { setCode(value.replace(/\D/g, "").slice(0, 6)); setErrorMessage(""); }} keyboardType="number-pad" autoFocus maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
+        <TextInput ref={codeInputRef} value={code} onChangeText={(value) => { const nextCode = value.replace(/\D/g, "").slice(0, 6); setCode(nextCode); setErrorMessage(""); if (nextCode.length === 6) void verifyCode(nextCode); }} keyboardType="number-pad" autoFocus maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
         <Pressable onPress={() => void pasteOtp()} style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}><MaterialIcons name="content-paste" size={16} color={COLORS.blue} /><Text style={styles.pasteText}>Paste OTP ពី Clipboard</Text></Pressable>
         <Pressable disabled={loading} onPress={() => void verifyCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "verified-user"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ផ្ទៀងផ្ទាត់ Code"}</Text></Pressable>
         <Pressable disabled={loading || resendCooldown > 0} onPress={() => void resendCode()} style={({ pressed }) => [styles.resendButton, pressed && styles.pressed, (loading || resendCooldown > 0) && styles.disabled]}><MaterialIcons name="refresh" size={16} color={resendCooldown > 0 ? COLORS.muted : COLORS.green} /><Text style={[styles.resendText, resendCooldown > 0 && styles.resendDisabledText]}>{resendCooldown > 0 ? `ផ្ញើ Code ម្តងទៀតក្នុង ${resendCooldown} វិនាទី` : "ផ្ញើ Code ម្តងទៀត"}</Text></Pressable>
