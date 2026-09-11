@@ -1,6 +1,10 @@
 import type { Express, Request, Response } from "express";
 import crypto from "node:crypto";
 import { PublishCommand, SNSClient } from "@aws-sdk/client-sns";
+import { COOKIE_NAME, ONE_YEAR_MS } from "../../shared/const.js";
+import { getUserByOpenId, upsertUser } from "../db";
+import { getSessionCookieOptions } from "./cookies";
+import { sdk } from "./sdk";
 
 const PHONE_PATTERN = /^\+[1-9]\d{7,14}$/;
 const CODE_PATTERN = /^\d{6}$/;
@@ -76,7 +80,7 @@ export function registerPhoneOtpRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/phone/verify-code", (req: Request, res: Response) => {
+  app.post("/api/auth/phone/verify-code", async (req: Request, res: Response) => {
     const challengeId = typeof req.body?.challengeId === "string" ? req.body.challengeId : "";
     const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
     if (!challengeId || !CODE_PATTERN.test(code)) {
@@ -100,7 +104,19 @@ export function registerPhoneOtpRoutes(app: Express) {
       return;
     }
     challenges.delete(challengeId);
-    // TODO: create the app session only after provider verification succeeds.
-    res.json({ ok: true, verified: true, phone: challenge.phone, session: null });
+    try {
+      const phoneHash = crypto.createHash("sha256").update(challenge.phone).digest("hex").slice(0, 32);
+      const openId = `phone_${phoneHash}`;
+      const signedInAt = new Date();
+      await upsertUser({ openId, name: challenge.phone, email: null, loginMethod: "phone", lastSignedIn: signedInAt });
+      const user = await getUserByOpenId(openId);
+      const sessionToken = await sdk.createSessionToken(openId, { name: user?.name || challenge.phone, expiresInMs: ONE_YEAR_MS });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.json({ ok: true, verified: true, phone: challenge.phone, sessionToken, user: { openId, name: user?.name || challenge.phone, loginMethod: "phone" } });
+    } catch (error) {
+      console.error("[OTP] Session creation failed", error instanceof Error ? error.message : String(error));
+      jsonError(res, 500, "បាន Verify Code ប៉ុន្តែមិនអាចបង្កើត Login Session បានទេ។ ពិនិត្យ database និង JWT_SECRET។");
+    }
   });
 }

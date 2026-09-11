@@ -30,4 +30,4 @@ Use an IAM principal with the minimum permission required:
 
 Before production use, configure AWS End User Messaging SMS spending limits and the appropriate origination identity for each destination country. Phone numbers must be in E.164 format, such as `+85512345678`. Do not put AWS credentials in the mobile app, Expo config, APK, or client-side environment variables.
 
-The endpoint intentionally returns a configuration error until `OTP_PROVIDER=aws-sns` and valid server credentials are installed. After verification, the current response confirms the phone number but does not yet create an application session; connect that result to the project’s session/auth provider before treating the user as signed in.
+The endpoint intentionally returns a configuration error until `OTP_PROVIDER=aws-sns` and valid server credentials are installed. After successful verification, the backend provisions or updates a phone user, creates a one-year signed session token using `JWT_SECRET`, sets the web session cookie, and returns the token for native SecureStore persistence. The mobile client stores the token and user profile only after the server confirms verification.

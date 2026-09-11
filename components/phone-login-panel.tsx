@@ -2,6 +2,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
+import { setSessionToken, setUserInfo } from "@/lib/_core/auth";
 
 const COLORS = {
   bg: "#070B10",
@@ -50,11 +51,13 @@ export function PhoneLoginPanel() {
     }
     setLoading(true);
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/auth/phone/verify-code`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeId, code: code.trim() }) });
-      const payload = await response.json() as { ok?: boolean; verified?: boolean; error?: string };
+      const response = await fetch(`${getApiBaseUrl()}/api/auth/phone/verify-code`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeId, code: code.trim() }) });
+      const payload = await response.json() as { ok?: boolean; verified?: boolean; sessionToken?: string; user?: { openId: string; name: string; loginMethod: string }; error?: string };
       if (!response.ok || !payload.ok || !payload.verified) throw new Error(payload.error || "Verify Code មិនត្រឹមត្រូវទេ");
+      if (payload.sessionToken) await setSessionToken(payload.sessionToken);
+      if (payload.user) await setUserInfo({ id: 0, openId: payload.user.openId, name: payload.user.name, email: null, loginMethod: payload.user.loginMethod, lastSignedIn: new Date() });
       setStep("verified");
-      setNotice("លេខទូរសព្ទ៍ត្រូវបានផ្ទៀងផ្ទាត់ជោគជ័យ។");
+      setNotice("Login និង Verify លេខទូរសព្ទ៍ជោគជ័យ។ Session ត្រូវបានរក្សាទុកដោយសុវត្ថិភាព។");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Verify Code មិនបានសម្រេចទេ");
     } finally {
@@ -81,7 +84,7 @@ export function PhoneLoginPanel() {
         <Pressable onPress={() => setStep("phone")} style={styles.secondaryButton}><Text style={styles.secondaryText}>ប្តូរលេខទូរសព្ទ៍</Text></Pressable>
       </> : <>
         <View style={styles.success}><MaterialIcons name="check-circle" size={22} color={COLORS.green} /><Text style={styles.successText}>លេខទូរសព្ទ៍ Verify ជោគជ័យ</Text></View>
-        <Text style={styles.help}>OTP ត្រូវបានផ្ទៀងផ្ទាត់នៅ backend។ ការបង្កើត app session អាចភ្ជាប់បន្ថែមជំហានបន្ទាប់។</Text>
+        <Text style={styles.help}>OTP ត្រូវបានផ្ទៀងផ្ទាត់នៅ backend ហើយ Login Session ត្រូវបានបង្កើត។</Text>
         <Pressable onPress={() => { setStep("phone"); setCode(""); }} style={styles.secondaryButton}><Text style={styles.secondaryText}>សាកល្បងម្ដងទៀត</Text></Pressable>
       </>}
     </View>
