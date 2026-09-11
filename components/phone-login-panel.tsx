@@ -1,4 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
@@ -24,6 +25,7 @@ export function PhoneLoginPanel() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const loadingRotation = useRef(new Animated.Value(0)).current;
+  const codeInputRef = useRef<TextInput>(null);
   const [notice, setNotice] = useState("AWS SNS OTP · បញ្ចូលលេខទូរសព្ទ៍ដើម្បីទទួល SMS");
 
   useEffect(() => {
@@ -36,6 +38,14 @@ export function PhoneLoginPanel() {
     animation.start();
     return () => animation.stop();
   }, [loading, loadingRotation]);
+
+  useEffect(() => {
+    if (step === "code") {
+      const timer = setTimeout(() => codeInputRef.current?.focus(), 250);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [step]);
 
   const friendlyError = (status: number, fallback: string) => {
     if (status === 401) return "កូដ OTP មិនត្រឹមត្រូវទេ។ សូមពិនិត្យសារ SMS ហើយបញ្ចូលម្ដងទៀត។";
@@ -88,6 +98,23 @@ export function PhoneLoginPanel() {
     }
   };
 
+  const pasteOtp = async () => {
+    try {
+      const clipboardText = await Clipboard.getStringAsync();
+      const pastedCode = clipboardText.replace(/\D/g, "").slice(0, 6);
+      if (pastedCode.length !== 6) {
+        setErrorMessage("Clipboard មិនមាន OTP ៦ ខ្ទង់ទេ។ សូម Copy Code ពីសារ SMS មុនសិន។");
+        return;
+      }
+      setCode(pastedCode);
+      setErrorMessage("");
+      setNotice("បានបំពេញ OTP ពី Clipboard រួចរាល់។ សូមចុចផ្ទៀងផ្ទាត់ Code។");
+      codeInputRef.current?.focus();
+    } catch {
+      setErrorMessage("មិនអាចអាន Clipboard បានទេ។ សូមបញ្ចូល OTP ដោយដៃ។");
+    }
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -103,7 +130,8 @@ export function PhoneLoginPanel() {
         <Pressable disabled={loading} onPress={() => void requestCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "sms"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ញើ SMS…" : "ស្នើ Verify Code"}</Text></Pressable>
       </> : step === "code" ? <>
         <Text style={styles.label}>Verify Code សម្រាប់ {phone}</Text>
-        <TextInput value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
+        <TextInput ref={codeInputRef} value={code} onChangeText={(value) => { setCode(value.replace(/\D/g, "").slice(0, 6)); setErrorMessage(""); }} keyboardType="number-pad" autoFocus maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
+        <Pressable onPress={() => void pasteOtp()} style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}><MaterialIcons name="content-paste" size={16} color={COLORS.blue} /><Text style={styles.pasteText}>Paste OTP ពី Clipboard</Text></Pressable>
         <Pressable disabled={loading} onPress={() => void verifyCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "verified-user"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ផ្ទៀងផ្ទាត់ Code"}</Text></Pressable>
         <Pressable onPress={() => setStep("phone")} style={styles.secondaryButton}><Text style={styles.secondaryText}>ប្តូរលេខទូរសព្ទ៍</Text></Pressable>
       </> : <>
@@ -131,6 +159,8 @@ const styles = StyleSheet.create({
   buttonText: { color: COLORS.bg, fontSize: 12, fontWeight: "900" },
   secondaryButton: { alignItems: "center", paddingVertical: 12 },
   secondaryText: { color: COLORS.green, fontSize: 11, fontWeight: "800" },
+  pasteButton: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10 },
+  pasteText: { color: COLORS.blue, fontSize: 11, fontWeight: "800" },
   success: { flexDirection: "row", alignItems: "center", gap: 8, padding: 13, borderRadius: 11, backgroundColor: "#123A26" },
   successText: { color: COLORS.green, fontSize: 12, fontWeight: "800" },
   pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
