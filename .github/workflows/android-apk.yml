@@ -102,6 +102,18 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload coverage to Codecov
+        if: always() && hashFiles('coverage/coverage-final.json') != ''
+        uses: codecov/codecov-action@v5
+        continue-on-error: true
+        with:
+          files: ./coverage/clover.xml
+          flags: otp-api
+          name: skillnext-otp-${{ github.run_number }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: true
+
       - name: Generate native Android project
         run: pnpm exec expo prebuild --platform android --no-install
 

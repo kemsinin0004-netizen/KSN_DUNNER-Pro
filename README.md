@@ -1,5 +1,7 @@
 # SkillNext AI Data Entry — Telegram Bot Guide
 
+[![Codecov](https://codecov.io/gh/kemsinin0004-netizen/KSN_DUNNER-Pro/branch/main/graph/badge.svg)](https://codecov.io/gh/kemsinin0004-netizen/KSN_DUNNER-Pro)
+
 SkillNext AI Data Entry គឺជា Expo/React Native application សម្រាប់ភ្ជាប់ Telegram Bot, ផ្ញើសារ, ទទួលសារ, បង្ហាញសារ​ក្នុង Inbox និងគ្រប់គ្រងសារតាម Local Notification។ ឯកសារនេះពន្យល់ពីការដំឡើង ការកំណត់ Telegram Bot ការសាកល្បង និងការបង្កើត Android APK។
 
 > **សេចក្តីសំខាន់:** ការទទួលសារនៅផ្ទៃខាងក្រោយប្រើ Android Background Task ដែលជាប្រព័ន្ធ best-effort។ Android អាចពន្យារពេលដំណើរការ ហើយមិនធានា real-time ឬការដំណើរការបន្ទាប់ពីអ្នកចុច Force Stop។
@@ -8,14 +10,14 @@ SkillNext AI Data Entry គឺជា Expo/React Native application សម្រ�
 
 ត្រូវមានកម្មវិធី និងគណនីខាងក្រោម៖
 
-| ឧបករណ៍ | តម្រូវការ |
-| --- | --- |
-| Node.js | Version 22 ឬ compatible version |
-| pnpm | Version 9.12.0 តាម `package.json` |
-| Java | JDK 17 សម្រាប់ Android build |
-| Android SDK | Platform 35 និង Build Tools 35.0.0 សម្រាប់ GitHub Actions workflow |
+| ឧបករណ៍         | តម្រូវការ                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| Node.js        | Version 22 ឬ compatible version                                                               |
+| pnpm           | Version 9.12.0 តាម `package.json`                                                             |
+| Java           | JDK 17 សម្រាប់ Android build                                                                  |
+| Android SDK    | Platform 35 និង Build Tools 35.0.0 សម្រាប់ GitHub Actions workflow                            |
 | Android device | ត្រូវប្រើ physical device ដើម្បីសាកល្បង notification actions និង background task បានជាក់ស្តែង |
-| Telegram | គណនី Telegram និង Bot ដែលបង្កើតតាម `@BotFather` |
+| Telegram       | គណនី Telegram និង Bot ដែលបង្កើតតាម `@BotFather`                                               |
 
 មុនចាប់ផ្តើម ត្រូវបង្កើត Bot ដោយបើក Telegram ទៅ `@BotFather`, ជ្រើស `/newbot`, កំណត់ឈ្មោះ និង username របស់ Bot។ បន្ទាប់មករក្សា **Bot Token** ជាសម្ងាត់។
 
@@ -36,6 +38,14 @@ pnpm check
 pnpm lint
 pnpm test
 ```
+
+Coverage report អាចបង្កើតក្នុងម៉ាស៊ីន Local ដោយប្រើ៖
+
+```bash
+pnpm test:coverage
+```
+
+GitHub Actions នឹង upload Coverage Report ទៅ **Codecov** ដោយប្រើ repository secret ឈ្មោះ `CODECOV_TOKEN` និង flag `otp-api`។ ដើម្បីបើក Coverage Trend សូមបង្កើត repository នៅ [codecov.io](https://codecov.io/), ចម្លង upload token ហើយរក្សាទុកនៅ GitHub Repository Settings → Secrets and variables → Actions → New repository secret។ Pull Request និង Push ទៅ `main` នឹងបង្ហាញ coverage comparison នៅ Codecov។ ប្រសិនបើ Secret មិនទាន់បានកំណត់ CI នៅតែបន្តដោយប្រើ local artifact និងមិនបរាជ័យ។
 
 បើចង់បើក web preview៖
 
@@ -82,13 +92,13 @@ Bot Token ត្រូវបានរក្សាទុកតាម `expo-secure
 
 ពេល Bot បានភ្ជាប់ App នឹងប្រើ `getUpdates` polling នៅពេល App បើក។ សារដែលមាន text នឹងបង្ហាញនៅក្នុង **សារចូលពី Telegram** ជាមួយព័ត៌មាន៖
 
-| ព័ត៌មាន | អត្ថន័យ |
-| --- | --- |
-| Sender | ឈ្មោះ ឬ username អ្នកផ្ញើ |
-| Chat | ឈ្មោះ chat ឬ chat ID |
-| Message | ខ្លឹមសារសារ |
-| Status | មិនទាន់អាន, Read ឬ Archived |
-| Time | ម៉ោងដែលសារត្រូវបានទទួល |
+| ព័ត៌មាន | អត្ថន័យ                     |
+| ------- | --------------------------- |
+| Sender  | ឈ្មោះ ឬ username អ្នកផ្ញើ   |
+| Chat    | ឈ្មោះ chat ឬ chat ID        |
+| Message | ខ្លឹមសារសារ                 |
+| Status  | មិនទាន់អាន, Read ឬ Archived |
+| Time    | ម៉ោងដែលសារត្រូវបានទទួល      |
 
 App ប្រើ Telegram update offset ដើម្បីកុំឲ្យសារដដែលបង្ហាញស្ទួន។ App រក្សាទុក message state ក្នុង local storage ហើយអាចធ្វើការ offline សម្រាប់ការមើលទិន្នន័យដែលបានទទួលរួច។
 
@@ -117,11 +127,11 @@ Background task ប្រើ `expo-background-task` និង `expo-task-manager
 
 ពេលមានសារថ្មី App នឹងបង្កើត Local Notification ដែលមាន Actions៖
 
-| Action | លទ្ធផល |
-| --- | --- |
-| **តបសារ** | បើក text input ក្នុង Notification ហើយផ្ញើចម្លើយទៅ chat ដើមតាម `sendMessage` |
-| **អានរួច** | រក្សា `readAt` របស់សារតាម `updateId` |
-| **Archive** | រក្សា `archivedAt` របស់សារតាម `updateId` |
+| Action      | លទ្ធផល                                                                      |
+| ----------- | --------------------------------------------------------------------------- |
+| **តបសារ**   | បើក text input ក្នុង Notification ហើយផ្ញើចម្លើយទៅ chat ដើមតាម `sendMessage` |
+| **អានរួច**  | រក្សា `readAt` របស់សារតាម `updateId`                                        |
+| **Archive** | រក្សា `archivedAt` របស់សារតាម `updateId`                                    |
 
 Notification data ត្រូវមាន `updateId` និង `chatId` ដើម្បីឲ្យ Reply ដឹងថាត្រូវផ្ញើទៅ Chat ណា។ ត្រូវ build APK/Development Build ថ្មី ដើម្បីសាកល្បង Notification actions ពេញលេញ។
 
@@ -184,10 +194,10 @@ git push origin main
 
 បើចង់ឲ្យ workflow ផ្ញើសារទៅ Telegram សូមបង្កើត repository secrets ខាងក្រោម៖
 
-| Secret | តម្លៃ |
-| --- | --- |
+| Secret               | តម្លៃ                                    |
+| -------------------- | ---------------------------------------- |
 | `TELEGRAM_BOT_TOKEN` | Token របស់ Bot ដែលត្រូវផ្ញើ notification |
-| `TELEGRAM_CHAT_ID` | Chat ID របស់អ្នកទទួល notification |
+| `TELEGRAM_CHAT_ID`   | Chat ID របស់អ្នកទទួល notification        |
 
 កុំដាក់តម្លៃ secrets នៅក្នុង workflow file ឬបោះពុម្ពក្នុង logs។ បើ secrets មិនមាន workflow នឹង skip notification ហើយ APK/Release នៅតែបង្កើតបាន។
 
