@@ -3,6 +3,8 @@ import * as Clipboard from "expo-clipboard";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
+import { OtpResendCountdown } from "@/components/otp-resend-countdown";
+import { RESEND_COOLDOWN_SECONDS } from "@/lib/otp-countdown";
 import { setSessionToken, setUserInfo } from "@/lib/_core/auth";
 
 const COLORS = {
@@ -14,7 +16,6 @@ const COLORS = {
   green: "#4ADE80",
   blue: "#62B0FF",
 };
-const RESEND_COOLDOWN_SECONDS = 60;
 
 type LoginStep = "phone" | "code" | "verified";
 type ErrorAction = "request" | "focus-code" | "resend" | undefined;
@@ -206,10 +207,6 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
       : otpError?.action === "focus-code" ? language === "km" ? "បញ្ចូលកូដម្ដងទៀត" : "Enter code again" : "";
 
   const activeErrorCopy = otpError ? ERROR_COPY[otpError.key][language] : null;
-  const cooldownLabel = resendCooldown > 0
-    ? language === "km" ? `អាចស្នើ OTP ម្ដងទៀតក្នុង ${String(Math.floor(resendCooldown / 60)).padStart(2, "0")}:${String(resendCooldown % 60).padStart(2, "0")}` : `Request another OTP in ${String(Math.floor(resendCooldown / 60)).padStart(2, "0")}:${String(resendCooldown % 60).padStart(2, "0")}`
-    : language === "km" ? "អាចស្នើ OTP ថ្មីបាន" : "You can request a new OTP";
-  const cooldownProgress = resendCooldown / RESEND_COOLDOWN_SECONDS;
 
   return (
     <View style={styles.card}>
@@ -237,8 +234,7 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
         <TextInput ref={codeInputRef} value={code} onChangeText={(value) => { const nextCode = value.replace(/\D/g, "").slice(0, 6); setCode(nextCode); clearError(); if (nextCode.length === 6) void verifyCode(nextCode); }} keyboardType="number-pad" autoFocus maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
         <Pressable onPress={() => void pasteOtp()} style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}><MaterialIcons name="content-paste" size={16} color={COLORS.blue} /><Text style={styles.pasteText}>Paste OTP ពី Clipboard</Text></Pressable>
         <Pressable disabled={loading} onPress={() => void verifyCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "verified-user"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ផ្ទៀងផ្ទាត់ Code"}</Text></Pressable>
-        <View style={styles.cooldownBox} accessibilityLiveRegion="polite"><View style={styles.cooldownHeader}><MaterialIcons name={resendCooldown > 0 ? "schedule" : "check-circle-outline"} size={15} color={resendCooldown > 0 ? COLORS.blue : COLORS.green} /><Text style={styles.cooldownLabel}>{cooldownLabel}</Text></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(0, Math.min(1, 1 - cooldownProgress)) * 100}%` }]} /></View></View>
-        <Pressable disabled={loading || resendCooldown > 0} onPress={() => void resendCode()} style={({ pressed }) => [styles.resendButton, pressed && styles.pressed, (loading || resendCooldown > 0) && styles.disabled]}><MaterialIcons name="refresh" size={16} color={resendCooldown > 0 ? COLORS.muted : COLORS.green} /><Text style={[styles.resendText, resendCooldown > 0 && styles.resendDisabledText]}>{resendCooldown > 0 ? language === "km" ? "រង់ចាំមុនស្នើម្ដងទៀត" : "Wait before requesting again" : language === "km" ? "ផ្ញើ Code ម្តងទៀត" : "Resend OTP"}</Text></Pressable>
+        <OtpResendCountdown seconds={resendCooldown} loading={loading} language={language} onResend={() => void resendCode()} />
         <Pressable onPress={() => setStep("phone")} style={styles.secondaryButton}><Text style={styles.secondaryText}>ប្តូរលេខទូរសព្ទ៍</Text></Pressable>
       </> : <>
         <Animated.View style={[styles.success, { opacity: successOpacity, transform: [{ scale: successScale }] }]}><View style={styles.successIcon}><MaterialIcons name="check" size={22} color={COLORS.bg} /></View><Text style={styles.successText}>លេខទូរសព្ទ៍ Verify ជោគជ័យ</Text></Animated.View>
