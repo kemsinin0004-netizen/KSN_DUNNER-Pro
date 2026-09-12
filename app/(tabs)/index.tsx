@@ -332,7 +332,7 @@ export default function HomeScreen() {
 
         {notice ? <View style={styles.notice}><MaterialIcons name="info-outline" size={16} color={COLORS.green} /><Text style={styles.noticeText}>{notice}</Text></View> : null}
 
-        {activeTab === "គណនី" ? <PhoneLoginPanel /> : null}
+        {activeTab === "គណនី" ? <PhoneLoginPanel onSuccess={() => { setActiveTab("ទំព័រដើម"); setNotice("Login ជោគជ័យ · សូមស្វាគមន៍ត្រឡប់មកកាន់ទំព័រដើម"); }} /> : null}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>ចាប់ផ្តើមរហ័ស</Text>
