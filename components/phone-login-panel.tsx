@@ -16,6 +16,8 @@ const COLORS = {
 };
 
 type LoginStep = "phone" | "code" | "verified";
+type ErrorAction = "request" | "focus-code" | "resend" | undefined;
+type OtpError = { title: string; message: string; action: ErrorAction };
 
 export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
   const [phone, setPhone] = useState("");
@@ -24,7 +26,7 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
   const [step, setStep] = useState<LoginStep>("phone");
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [otpError, setOtpError] = useState<OtpError | null>(null);
   const loadingRotation = useRef(new Animated.Value(0)).current;
   const codeInputRef = useRef<TextInput>(null);
   const verifyingRef = useRef(false);
@@ -75,32 +77,42 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
     return () => clearTimeout(timer);
   }, [onSuccess, step, successOpacity, successScale]);
 
-  const friendlyError = (status: number, fallback: string) => {
-    if (status === 401) return "កូដ OTP មិនត្រឹមត្រូវទេ។ សូមពិនិត្យសារ SMS ហើយបញ្ចូលម្ដងទៀត។";
-    if (status === 410) return "កូដ OTP បានផុតកំណត់។ សូមស្នើកូដថ្មី។";
-    if (status === 429) return "អ្នកបានបញ្ចូលខុសច្រើនដង។ សូមស្នើកូដថ្មី ហើយព្យាយាមម្ដងទៀត។";
-    if (status === 502) return "ប្រព័ន្ធផ្ញើ SMS មានបញ្ហា។ សូមពិនិត្យ AWS SNS configuration ឬព្យាយាមម្ដងទៀត។";
-    return fallback;
+  const clearError = () => setOtpError(null);
+
+  const friendlyError = (status: number, fallback: string, phase: "request" | "verify"): OtpError => {
+    if (status === 400 && phase === "request") return { title: "លេខទូរសព្ទ៍មិនត្រឹមត្រូវ", message: "សូមប្រើទម្រង់អន្តរជាតិ ដូចជា +85512345678។", action: "request" };
+    if (status === 400) return { title: "Verify Code មិនពេញលេញ", message: "សូមបញ្ចូលលេខកូដ OTP ចំនួន ៦ ខ្ទង់។", action: "focus-code" };
+    if (status === 401) return { title: "កូដ OTP មិនត្រឹមត្រូវ", message: "កូដនេះមិនត្រូវនឹងសារ SMS ទេ។ សូមពិនិត្យ ហើយសាកល្បងម្ដងទៀត។", action: "focus-code" };
+    if (status === 410) return { title: "កូដ OTP ផុតកំណត់", message: "កូដមានសុពលភាពត្រឹម ៥ នាទី។ សូមស្នើកូដថ្មី។", action: "resend" };
+    if (status === 429) return { title: "ព្យាយាមលើសចំនួនកំណត់", message: "អ្នកបានបញ្ចូលកូដខុស ៥ ដង។ សូមស្នើកូដថ្មី។", action: "resend" };
+    if (status === 502) return { title: "ផ្ញើ SMS មិនបានសម្រេច", message: "ប្រព័ន្ធផ្ញើ SMS មានបញ្ហា។ សូមព្យាយាមម្ដងទៀត។", action: "request" };
+    if (status === 503) return { title: "OTP Service មិនទាន់រួចរាល់", message: "AWS SNS OTP មិនទាន់បានកំណត់នៅ server។ សូមទាក់ទងអ្នកគ្រប់គ្រង។", action: undefined };
+    return { title: phase === "request" ? "ស្នើ Verify Code មិនបានសម្រេច" : "ផ្ទៀងផ្ទាត់ OTP មិនបានសម្រេច", message: fallback, action: phase === "request" ? "request" : "focus-code" };
   };
+
+  const showError = (status: number, fallback: string, phase: "request" | "verify") => setOtpError(friendlyError(status, fallback, phase));
 
   const requestCode = async () => {
     if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
-      setErrorMessage("សូមបញ្ចូលលេខទូរសព្ទ៍ជាទម្រង់អន្តរជាតិ ឧ. +85512345678");
+      showError(400, "សូមបញ្ចូលលេខទូរសព្ទ៍ជាទម្រង់អន្តរជាតិ ឧ. +85512345678", "request");
       return;
     }
-    setErrorMessage("");
+    clearError();
     setLoading(true);
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/auth/phone/request-code`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: phone.trim() }) });
       const payload = await response.json() as { ok?: boolean; challengeId?: string; error?: string };
-      if (!response.ok || !payload.ok || !payload.challengeId) throw new Error(friendlyError(response.status, payload.error || "មិនអាចផ្ញើ SMS បានទេ"));
+      if (!response.ok || !payload.ok || !payload.challengeId) {
+        showError(response.status, payload.error || "មិនអាចផ្ញើ SMS បានទេ", "request");
+        return;
+      }
       setChallengeId(payload.challengeId);
       setStep("code");
       setCode("");
       setResendCooldown(60);
       setNotice("បានផ្ញើ Verify Code ទៅលេខទូរសព្ទ៍របស់អ្នក។ Code មានសុពលភាព 5 នាទី។");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "មិនអាចផ្ញើ SMS បានទេ");
+      showError(0, error instanceof Error ? error.message : "មិនអាចផ្ញើ SMS បានទេ", "request");
     } finally {
       setLoading(false);
     }
@@ -109,23 +121,26 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
   const verifyCode = async (codeOverride?: string) => {
     const submittedCode = (codeOverride ?? code).trim();
     if (!/^\d{6}$/.test(submittedCode)) {
-      setErrorMessage("សូមបញ្ចូល Verify Code ចំនួន ៦ ខ្ទង់។");
+      showError(400, "សូមបញ្ចូល Verify Code ចំនួន ៦ ខ្ទង់។", "verify");
       return;
     }
     if (verifyingRef.current) return;
     verifyingRef.current = true;
-    setErrorMessage("");
+    clearError();
     setLoading(true);
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/auth/phone/verify-code`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeId, code: submittedCode }) });
       const payload = await response.json() as { ok?: boolean; verified?: boolean; sessionToken?: string; user?: { openId: string; name: string; loginMethod: string }; error?: string };
-      if (!response.ok || !payload.ok || !payload.verified) throw new Error(friendlyError(response.status, payload.error || "Verify Code មិនត្រឹមត្រូវទេ"));
+      if (!response.ok || !payload.ok || !payload.verified) {
+        showError(response.status, payload.error || "Verify Code មិនត្រឹមត្រូវទេ", "verify");
+        return;
+      }
       if (payload.sessionToken) await setSessionToken(payload.sessionToken);
       if (payload.user) await setUserInfo({ id: 0, openId: payload.user.openId, name: payload.user.name, email: null, loginMethod: payload.user.loginMethod, lastSignedIn: new Date() });
       setStep("verified");
       setNotice("Login និង Verify លេខទូរសព្ទ៍ជោគជ័យ។ Session ត្រូវបានរក្សាទុកដោយសុវត្ថិភាព។");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Verify Code មិនបានសម្រេចទេ");
+      showError(0, error instanceof Error ? error.message : "Verify Code មិនបានសម្រេចទេ", "verify");
     } finally {
       setLoading(false);
       verifyingRef.current = false;
@@ -137,24 +152,40 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
       const clipboardText = await Clipboard.getStringAsync();
       const pastedCode = clipboardText.replace(/\D/g, "").slice(0, 6);
       if (pastedCode.length !== 6) {
-        setErrorMessage("Clipboard មិនមាន OTP ៦ ខ្ទង់ទេ។ សូម Copy Code ពីសារ SMS មុនសិន។");
+        showError(400, "Clipboard មិនមាន OTP ៦ ខ្ទង់ទេ។ សូម Copy Code ពីសារ SMS មុនសិន។", "verify");
         return;
       }
       setCode(pastedCode);
-      setErrorMessage("");
+      clearError();
       setNotice("បានបំពេញ OTP ៦ ខ្ទង់។ កំពុងផ្ទៀងផ្ទាត់ដោយស្វ័យប្រវត្តិ…");
       codeInputRef.current?.focus();
       void verifyCode(pastedCode);
     } catch {
-      setErrorMessage("មិនអាចអាន Clipboard បានទេ។ សូមបញ្ចូល OTP ដោយដៃ។");
+      showError(0, "មិនអាចអាន Clipboard បានទេ។ សូមបញ្ចូល OTP ដោយដៃ។", "verify");
     }
   };
 
   const resendCode = async () => {
     if (resendCooldown > 0 || loading) return;
-    setErrorMessage("");
+    clearError();
     await requestCode();
   };
+
+  const handleErrorAction = () => {
+    if (otpError?.action === "request") void requestCode();
+    if (otpError?.action === "resend") void resendCode();
+    if (otpError?.action === "focus-code") {
+      setCode("");
+      clearError();
+      codeInputRef.current?.focus();
+    }
+  };
+
+  const errorActionLabel = otpError?.action === "request"
+    ? "ព្យាយាមម្ដងទៀត"
+    : otpError?.action === "resend"
+      ? resendCooldown > 0 ? `ស្នើកូដថ្មីក្នុង ${resendCooldown} វិនាទី` : "ស្នើកូដថ្មី"
+      : otpError?.action === "focus-code" ? "បញ្ចូលកូដម្ដងទៀត" : "";
 
   return (
     <View style={styles.card}>
@@ -163,7 +194,14 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
         <View style={{ flex: 1 }}><Text style={styles.title}>Login គណនី</Text><Text style={styles.subtitle}>Custom Backend · AWS SNS SMS OTP</Text></View>
       </View>
       <View style={styles.notice}><MaterialIcons name="info-outline" size={16} color={COLORS.blue} /><Text style={styles.noticeText}>{notice}</Text></View>
-      {errorMessage ? <View style={styles.error}><MaterialIcons name="error-outline" size={18} color="#FF7474" /><Text style={styles.errorText}>{errorMessage}</Text></View> : null}
+      {otpError ? <View style={styles.error} accessibilityRole="alert">
+        <MaterialIcons name="error-outline" size={19} color="#FF7474" />
+        <View style={styles.errorContent}>
+          <Text style={styles.errorTitle}>{otpError.title}</Text>
+          <Text style={styles.errorText}>{otpError.message}</Text>
+          {otpError.action ? <Pressable disabled={loading || (otpError.action === "resend" && resendCooldown > 0)} onPress={handleErrorAction} style={({ pressed }) => [styles.errorAction, pressed && styles.pressed, (loading || (otpError.action === "resend" && resendCooldown > 0)) && styles.disabled]}><Text style={styles.errorActionText}>{errorActionLabel}</Text></Pressable> : null}
+        </View>
+      </View> : null}
       {step === "phone" ? <>
         <Text style={styles.label}>លេខទូរសព្ទ៍</Text>
         <TextInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoCapitalize="none" placeholder="+85512345678" placeholderTextColor={COLORS.muted} style={styles.input} />
@@ -171,7 +209,7 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
         <Pressable disabled={loading} onPress={() => void requestCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "sms"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ញើ SMS…" : "ស្នើ Verify Code"}</Text></Pressable>
       </> : step === "code" ? <>
         <Text style={styles.label}>Verify Code សម្រាប់ {phone}</Text>
-        <TextInput ref={codeInputRef} value={code} onChangeText={(value) => { const nextCode = value.replace(/\D/g, "").slice(0, 6); setCode(nextCode); setErrorMessage(""); if (nextCode.length === 6) void verifyCode(nextCode); }} keyboardType="number-pad" autoFocus maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
+        <TextInput ref={codeInputRef} value={code} onChangeText={(value) => { const nextCode = value.replace(/\D/g, "").slice(0, 6); setCode(nextCode); clearError(); if (nextCode.length === 6) void verifyCode(nextCode); }} keyboardType="number-pad" autoFocus maxLength={6} placeholder="000000" placeholderTextColor={COLORS.muted} style={[styles.input, styles.codeInput]} />
         <Pressable onPress={() => void pasteOtp()} style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}><MaterialIcons name="content-paste" size={16} color={COLORS.blue} /><Text style={styles.pasteText}>Paste OTP ពី Clipboard</Text></Pressable>
         <Pressable disabled={loading} onPress={() => void verifyCode()} style={({ pressed }) => [styles.button, pressed && styles.pressed, loading && styles.disabled]}><Animated.View style={{ transform: [{ rotate: loadingRotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }] }}><MaterialIcons name={loading ? "sync" : "verified-user"} size={18} color={COLORS.bg} /></Animated.View><Text style={styles.buttonText}>{loading ? "កំពុងផ្ទៀងផ្ទាត់…" : "ផ្ទៀងផ្ទាត់ Code"}</Text></Pressable>
         <Pressable disabled={loading || resendCooldown > 0} onPress={() => void resendCode()} style={({ pressed }) => [styles.resendButton, pressed && styles.pressed, (loading || resendCooldown > 0) && styles.disabled]}><MaterialIcons name="refresh" size={16} color={resendCooldown > 0 ? COLORS.muted : COLORS.green} /><Text style={[styles.resendText, resendCooldown > 0 && styles.resendDisabledText]}>{resendCooldown > 0 ? `ផ្ញើ Code ម្តងទៀតក្នុង ${resendCooldown} វិនាទី` : "ផ្ញើ Code ម្តងទៀត"}</Text></Pressable>
@@ -212,5 +250,9 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.55 },
   error: { flexDirection: "row", gap: 8, alignItems: "flex-start", padding: 11, borderRadius: 10, backgroundColor: "#351A20", borderWidth: 1, borderColor: "#71333E", marginBottom: 12 },
+  errorContent: { flex: 1, gap: 3 },
+  errorTitle: { color: "#FFD2D2", fontSize: 12, fontWeight: "900" },
   errorText: { flex: 1, color: "#FFB5B5", fontSize: 11, lineHeight: 17 },
+  errorAction: { alignSelf: "flex-start", marginTop: 5, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, backgroundColor: "#57242D" },
+  errorActionText: { color: "#FFD2D2", fontSize: 10, fontWeight: "900" },
 });
