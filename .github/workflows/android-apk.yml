@@ -68,8 +68,39 @@ jobs:
       - name: Validate project
         run: |
           pnpm test
+          pnpm test:coverage
           pnpm check
           pnpm lint
+
+      - name: Add coverage summary to workflow
+        if: always()
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+            const fs = require('fs');
+            const summary = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8')).total;
+            const row = (name, value) => `${name} | ${value.pct}% | ${value.covered}/${value.total}`;
+            console.log('## Automated API Test Coverage');
+            console.log('');
+            console.log('| Metric | Coverage | Covered / Total |');
+            console.log('|---|---:|---:|');
+            console.log(`| ${row('Statements', summary.statements)} |`);
+            console.log(`| ${row('Branches', summary.branches)} |`);
+            console.log(`| ${row('Functions', summary.functions)} |`);
+            console.log(`| ${row('Lines', summary.lines)} |`);
+            NODE
+          else
+            echo 'Coverage summary was not generated.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillnext-coverage-${{ github.run_number }}
+          path: coverage/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Generate native Android project
         run: pnpm exec expo prebuild --platform android --no-install
