@@ -14,6 +14,10 @@ type Challenge = { phone: string; hash: string; expiresAt: number; attempts: num
 const challenges = new Map<string, Challenge>();
 let snsClient: SNSClient | null = null;
 
+export type PhoneOtpRouteOptions = {
+  sendSms?: (phone: string, code: string) => Promise<void>;
+};
+
 function hashCode(challengeId: string, code: string) {
   return crypto.createHash("sha256").update(`${challengeId}:${code}`).digest("hex");
 }
@@ -52,7 +56,7 @@ async function sendSms(phone: string, code: string) {
  * Custom backend contract for phone OTP. This scaffold never returns an OTP code.
  * This implementation uses AWS SNS. Credentials must be server-side environment variables.
  */
-export function registerPhoneOtpRoutes(app: Express) {
+export function registerPhoneOtpRoutes(app: Express, options: PhoneOtpRouteOptions = {}) {
   app.post("/api/auth/phone/request-code", async (req: Request, res: Response) => {
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
     if (!PHONE_PATTERN.test(phone)) {
@@ -71,7 +75,7 @@ export function registerPhoneOtpRoutes(app: Express) {
     challenges.set(challengeId, { phone, hash: hashCode(challengeId, code), expiresAt: Date.now() + CHALLENGE_TTL_MS, attempts: 0 });
 
     try {
-      await sendSms(phone, code);
+      await (options.sendSms ?? sendSms)(phone, code);
       res.json({ ok: true, challengeId, expiresInSeconds: CHALLENGE_TTL_MS / 1000 });
     } catch (error) {
       challenges.delete(challengeId);

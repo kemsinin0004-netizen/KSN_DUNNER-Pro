@@ -243,6 +243,17 @@ The UI should not expose AWS error details, access-key identifiers, database err
 
 ## 10. Test Plan
 
+The repository includes an automated HTTP-level test suite at `tests/phone-otp.api.test.ts`. Run the focused suite with:
+
+```bash
+pnpm check
+pnpm test -- --run tests/phone-otp.api.test.ts
+```
+
+The suite injects a test-only SMS sender through `registerPhoneOtpRoutes` and therefore never sends a real SMS or requires AWS credentials. The injected sender captures the generated code only inside the test process. This test hook is not used by the production server registration.
+
+The suite currently contains ten passing cases covering malformed phone input, disabled provider configuration, successful challenge creation, SMS provider failure, successful session creation, malformed verification input, wrong-code recovery, the five-attempt limit, challenge expiry, and challenge reuse prevention.
+
 | Test | Expected result |
 |---|---|
 | Submit a valid E.164 phone number with AWS configured | HTTP 200, `challengeId`, and `expiresInSeconds: 300` |
