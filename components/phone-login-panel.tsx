@@ -17,9 +17,26 @@ const COLORS = {
 
 type LoginStep = "phone" | "code" | "verified";
 type ErrorAction = "request" | "focus-code" | "resend" | undefined;
-type OtpError = { title: string; message: string; action: ErrorAction };
+type Language = "km" | "en";
+type ErrorKey = "phone" | "codeRequired" | "invalidCode" | "expired" | "tooMany" | "smsFailed" | "serviceUnavailable" | "requestFailed" | "verifyFailed" | "clipboardEmpty" | "clipboardRead";
+type OtpError = { key: ErrorKey; action: ErrorAction };
+
+const ERROR_COPY: Record<ErrorKey, { km: { title: string; message: string }; en: { title: string; message: string } }> = {
+  phone: { km: { title: "លេខទូរសព្ទ៍មិនត្រឹមត្រូវ", message: "សូមប្រើទម្រង់អន្តរជាតិ ដូចជា +85512345678។" }, en: { title: "Invalid phone number", message: "Use international format, for example +85512345678." } },
+  codeRequired: { km: { title: "Verify Code មិនពេញលេញ", message: "សូមបញ្ចូលលេខកូដ OTP ចំនួន ៦ ខ្ទង់។" }, en: { title: "Incomplete verification code", message: "Enter the 6-digit OTP code." } },
+  invalidCode: { km: { title: "កូដ OTP មិនត្រឹមត្រូវ", message: "កូដនេះមិនត្រូវនឹងសារ SMS ទេ។ សូមពិនិត្យ ហើយសាកល្បងម្ដងទៀត។" }, en: { title: "Incorrect OTP", message: "This code does not match the SMS. Check it and try again." } },
+  expired: { km: { title: "កូដ OTP ផុតកំណត់", message: "កូដមានសុពលភាពត្រឹម ៥ នាទី។ សូមស្នើកូដថ្មី។" }, en: { title: "OTP expired", message: "The code is valid for 5 minutes. Request a new code." } },
+  tooMany: { km: { title: "ព្យាយាមលើសចំនួនកំណត់", message: "អ្នកបានបញ្ចូលកូដខុស ៥ ដង។ សូមស្នើកូដថ្មី។" }, en: { title: "Too many attempts", message: "You entered the wrong code 5 times. Request a new code." } },
+  smsFailed: { km: { title: "ផ្ញើ SMS មិនបានសម្រេច", message: "ប្រព័ន្ធផ្ញើ SMS មានបញ្ហា។ សូមព្យាយាមម្ដងទៀត។" }, en: { title: "SMS delivery failed", message: "The SMS service had a problem. Please try again." } },
+  serviceUnavailable: { km: { title: "OTP Service មិនទាន់រួចរាល់", message: "AWS SNS OTP មិនទាន់បានកំណត់នៅ server។ សូមទាក់ទងអ្នកគ្រប់គ្រង។" }, en: { title: "OTP service unavailable", message: "AWS SNS OTP is not configured on the server. Contact an administrator." } },
+  requestFailed: { km: { title: "ស្នើ Verify Code មិនបានសម្រេច", message: "មិនអាចទទួលបានកូដ OTP ទេ។ សូមព្យាយាមម្ដងទៀត។" }, en: { title: "Could not request code", message: "We could not request an OTP. Please try again." } },
+  verifyFailed: { km: { title: "ផ្ទៀងផ្ទាត់ OTP មិនបានសម្រេច", message: "ការផ្ទៀងផ្ទាត់មិនបានសម្រេច។ សូមពិនិត្យការតភ្ជាប់ ហើយសាកល្បងម្ដងទៀត។" }, en: { title: "Verification failed", message: "Verification could not be completed. Check your connection and try again." } },
+  clipboardEmpty: { km: { title: "Clipboard មិនមាន OTP", message: "សូម Copy Code ៦ ខ្ទង់ពីសារ SMS មុនសិន។" }, en: { title: "No OTP in clipboard", message: "Copy the 6-digit code from your SMS first." } },
+  clipboardRead: { km: { title: "មិនអាចអាន Clipboard", message: "សូមបញ្ចូល OTP ដោយដៃ។" }, en: { title: "Could not read clipboard", message: "Please enter the OTP manually." } },
+};
 
 export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
+  const [language, setLanguage] = useState<Language>("km");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [challengeId, setChallengeId] = useState("");
@@ -79,18 +96,18 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
 
   const clearError = () => setOtpError(null);
 
-  const friendlyError = (status: number, fallback: string, phase: "request" | "verify"): OtpError => {
-    if (status === 400 && phase === "request") return { title: "លេខទូរសព្ទ៍មិនត្រឹមត្រូវ", message: "សូមប្រើទម្រង់អន្តរជាតិ ដូចជា +85512345678។", action: "request" };
-    if (status === 400) return { title: "Verify Code មិនពេញលេញ", message: "សូមបញ្ចូលលេខកូដ OTP ចំនួន ៦ ខ្ទង់។", action: "focus-code" };
-    if (status === 401) return { title: "កូដ OTP មិនត្រឹមត្រូវ", message: "កូដនេះមិនត្រូវនឹងសារ SMS ទេ។ សូមពិនិត្យ ហើយសាកល្បងម្ដងទៀត។", action: "focus-code" };
-    if (status === 410) return { title: "កូដ OTP ផុតកំណត់", message: "កូដមានសុពលភាពត្រឹម ៥ នាទី។ សូមស្នើកូដថ្មី។", action: "resend" };
-    if (status === 429) return { title: "ព្យាយាមលើសចំនួនកំណត់", message: "អ្នកបានបញ្ចូលកូដខុស ៥ ដង។ សូមស្នើកូដថ្មី។", action: "resend" };
-    if (status === 502) return { title: "ផ្ញើ SMS មិនបានសម្រេច", message: "ប្រព័ន្ធផ្ញើ SMS មានបញ្ហា។ សូមព្យាយាមម្ដងទៀត។", action: "request" };
-    if (status === 503) return { title: "OTP Service មិនទាន់រួចរាល់", message: "AWS SNS OTP មិនទាន់បានកំណត់នៅ server។ សូមទាក់ទងអ្នកគ្រប់គ្រង។", action: undefined };
-    return { title: phase === "request" ? "ស្នើ Verify Code មិនបានសម្រេច" : "ផ្ទៀងផ្ទាត់ OTP មិនបានសម្រេច", message: fallback, action: phase === "request" ? "request" : "focus-code" };
+  const friendlyError = (status: number, _fallback: string, phase: "request" | "verify"): OtpError => {
+    if (status === 400 && phase === "request") return { key: "phone", action: "request" };
+    if (status === 400) return { key: "codeRequired", action: "focus-code" };
+    if (status === 401) return { key: "invalidCode", action: "focus-code" };
+    if (status === 410) return { key: "expired", action: "resend" };
+    if (status === 429) return { key: "tooMany", action: "resend" };
+    if (status === 502) return { key: "smsFailed", action: "request" };
+    if (status === 503) return { key: "serviceUnavailable", action: undefined };
+    return { key: phase === "request" ? "requestFailed" : "verifyFailed", action: phase === "request" ? "request" : "focus-code" };
   };
 
-  const showError = (status: number, fallback: string, phase: "request" | "verify") => setOtpError(friendlyError(status, fallback, phase));
+  const showError = (status: number, fallback: string, phase: "request" | "verify", overrideKey?: ErrorKey) => setOtpError(overrideKey ? { key: overrideKey, action: "focus-code" } : friendlyError(status, fallback, phase));
 
   const requestCode = async () => {
     if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
@@ -152,7 +169,7 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
       const clipboardText = await Clipboard.getStringAsync();
       const pastedCode = clipboardText.replace(/\D/g, "").slice(0, 6);
       if (pastedCode.length !== 6) {
-        showError(400, "Clipboard មិនមាន OTP ៦ ខ្ទង់ទេ។ សូម Copy Code ពីសារ SMS មុនសិន។", "verify");
+        showError(400, "Clipboard មិនមាន OTP ៦ ខ្ទង់ទេ។", "verify", "clipboardEmpty");
         return;
       }
       setCode(pastedCode);
@@ -161,7 +178,7 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
       codeInputRef.current?.focus();
       void verifyCode(pastedCode);
     } catch {
-      showError(0, "មិនអាចអាន Clipboard បានទេ។ សូមបញ្ចូល OTP ដោយដៃ។", "verify");
+      showError(0, "Clipboard read failed", "verify", "clipboardRead");
     }
   };
 
@@ -182,23 +199,26 @@ export function PhoneLoginPanel({ onSuccess }: { onSuccess?: () => void }) {
   };
 
   const errorActionLabel = otpError?.action === "request"
-    ? "ព្យាយាមម្ដងទៀត"
+    ? language === "km" ? "ព្យាយាមម្ដងទៀត" : "Try again"
     : otpError?.action === "resend"
-      ? resendCooldown > 0 ? `ស្នើកូដថ្មីក្នុង ${resendCooldown} វិនាទី` : "ស្នើកូដថ្មី"
-      : otpError?.action === "focus-code" ? "បញ្ចូលកូដម្ដងទៀត" : "";
+      ? resendCooldown > 0 ? language === "km" ? `ស្នើកូដថ្មីក្នុង ${resendCooldown} វិនាទី` : `Request a new code in ${resendCooldown}s` : language === "km" ? "ស្នើកូដថ្មី" : "Request new code"
+      : otpError?.action === "focus-code" ? language === "km" ? "បញ្ចូលកូដម្ដងទៀត" : "Enter code again" : "";
+
+  const activeErrorCopy = otpError ? ERROR_COPY[otpError.key][language] : null;
 
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <View style={styles.icon}><MaterialIcons name="person-outline" size={22} color={COLORS.green} /></View>
-        <View style={{ flex: 1 }}><Text style={styles.title}>Login គណនី</Text><Text style={styles.subtitle}>Custom Backend · AWS SNS SMS OTP</Text></View>
+        <View style={{ flex: 1 }}><Text style={styles.title}>{language === "km" ? "Login គណនី" : "Account login"}</Text><Text style={styles.subtitle}>Custom Backend · AWS SNS SMS OTP</Text></View>
+        <Pressable onPress={() => setLanguage((current) => current === "km" ? "en" : "km")} style={styles.languageButton} accessibilityLabel={language === "km" ? "Switch to English" : "ប្ដូរទៅភាសាខ្មែរ"}><Text style={styles.languageText}>{language === "km" ? "EN" : "ខ្មែរ"}</Text></Pressable>
       </View>
       <View style={styles.notice}><MaterialIcons name="info-outline" size={16} color={COLORS.blue} /><Text style={styles.noticeText}>{notice}</Text></View>
       {otpError ? <View style={styles.error} accessibilityRole="alert">
         <MaterialIcons name="error-outline" size={19} color="#FF7474" />
         <View style={styles.errorContent}>
-          <Text style={styles.errorTitle}>{otpError.title}</Text>
-          <Text style={styles.errorText}>{otpError.message}</Text>
+          <Text style={styles.errorTitle}>{activeErrorCopy?.title}</Text>
+          <Text style={styles.errorText}>{activeErrorCopy?.message}</Text>
           {otpError.action ? <Pressable disabled={loading || (otpError.action === "resend" && resendCooldown > 0)} onPress={handleErrorAction} style={({ pressed }) => [styles.errorAction, pressed && styles.pressed, (loading || (otpError.action === "resend" && resendCooldown > 0)) && styles.disabled]}><Text style={styles.errorActionText}>{errorActionLabel}</Text></Pressable> : null}
         </View>
       </View> : null}
@@ -227,6 +247,8 @@ const styles = StyleSheet.create({
   card: { marginTop: 16, padding: 16, borderRadius: 18, backgroundColor: "#0D2118", borderWidth: 1, borderColor: "#2A744A" },
   header: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
   icon: { width: 42, height: 42, borderRadius: 13, backgroundColor: "#4ADE8018", alignItems: "center", justifyContent: "center" },
+  languageButton: { paddingVertical: 7, paddingHorizontal: 9, borderRadius: 8, backgroundColor: "#173926", borderWidth: 1, borderColor: "#2A744A" },
+  languageText: { color: COLORS.green, fontSize: 10, fontWeight: "900" },
   title: { color: COLORS.text, fontSize: 16, fontWeight: "800" },
   subtitle: { color: COLORS.muted, fontSize: 10, marginTop: 3 },
   notice: { flexDirection: "row", gap: 7, padding: 10, borderRadius: 10, backgroundColor: "#101C2A", marginBottom: 14 },
